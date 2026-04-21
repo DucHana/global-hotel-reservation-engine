@@ -48,6 +48,21 @@ export default function AdminDashboard() {
   const [priceReason, setPriceReason] = useState('');
   const [suggestion, setSuggestion] = useState<{ suggested_price: number; reasoning: string; change_pct: number } | null>(null);
 
+  // Modal form states
+  const [modalUserName, setModalUserName] = useState('');
+  const [modalUserLastName, setModalUserLastName] = useState('');
+  const [modalUserPhone, setModalUserPhone] = useState('');
+  const [modalUserEmail, setModalUserEmail] = useState('');
+  const [modalUserPassword, setModalUserPassword] = useState('');
+  const [modalUserRole, setModalUserRole] = useState('customer');
+
+  const [modalRoomName, setModalRoomName] = useState('');
+  const [modalRoomHotel, setModalRoomHotel] = useState('');
+  const [modalRoomCapacity, setModalRoomCapacity] = useState(2);
+  const [modalRoomPrice, setModalRoomPrice] = useState(2000000);
+  const [modalRoomTotal, setModalRoomTotal] = useState(10);
+  const [modalRoomDesc, setModalRoomDesc] = useState('');
+
   const showToast = useCallback((msg: string, type: 'success' | 'warning' | 'error' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
@@ -103,7 +118,7 @@ export default function AdminDashboard() {
       setLoading(false);
     };
     load();
-  }, [page]);
+  }, [page, showToast]);
 
   const handlePriceUpdate = async () => {
     try {
@@ -440,7 +455,7 @@ export default function AdminDashboard() {
           </nav>
 
           <div className="sidebar-footer">
-            <div className="user-card" onClick={logout}>
+            <div className="user-card" onClick={logout} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && logout()} title="Đăng xuất">
               <div className="user-avatar">{user?.full_name?.[0] || 'A'}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.full_name || 'Admin'}</div>
@@ -464,14 +479,14 @@ export default function AdminDashboard() {
                 {apiOnline === null ? '⟳ Checking...' : apiOnline ? '● API Online' : '● Mock Data'}
               </span>
               <div style={{ position: 'relative' }}>
-                <button className="icon-btn" onClick={() => setNotifOpen(v => !v)}>
+                <button className="icon-btn" onClick={() => setNotifOpen(v => !v)} title="Thông báo" aria-label="Mở thông báo">
                   🔔<span className="notif-dot" />
                 </button>
                 {notifOpen && (
-                  <div className="notif-panel">
+                  <div className="notif-panel" role="dialog" aria-label="Bảng thông báo">
                     <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: 13, fontWeight: 600 }}>Thông báo</span>
-                      <button onClick={() => setNotifOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer' }}>✕</button>
+                      <button onClick={() => setNotifOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer' }} title="Đóng thông báo" aria-label="Đóng thông báo">✕</button>
                     </div>
                     {[
                       ['⚠️','Giá biến động >50%','Ocean View Standard tăng 71.4%','2 giờ trước'],
@@ -497,7 +512,7 @@ export default function AdminDashboard() {
           <div className="content">
             {loading && (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-                <div className="spinner" />
+                <div className="spinner" role="status" aria-label="Đang tải dữ liệu" />
               </div>
             )}
 
@@ -537,15 +552,15 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                         <div className="card-body">
-                          <div className="chart-wrap">
+                          <div className="chart-wrap" role="img" aria-label="Biểu đồ doanh thu và đặt phòng 6 tháng">
                             {analytics.monthly_revenue.map((d, i) => {
                               const maxR = Math.max(...analytics.monthly_revenue.map(x => x.revenue));
                               const maxB = Math.max(...analytics.monthly_revenue.map(x => x.bookings));
                               return (
                                 <div key={i} className="bar-group">
                                   <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 'calc(100% - 24px)', flex: 1, width: '100%' }}>
-                                    <div className="bar bar-gold" style={{ height: `${d.revenue / maxR * 100}%`, minHeight: 4, width: '46%' }} title={`${d.month}: ₫${d.revenue}M`} />
-                                    <div className="bar bar-blue" style={{ height: `${d.bookings / maxB * 100}%`, minHeight: 4, width: '46%' }} title={`${d.month}: ${d.bookings} đặt`} />
+                                    <div className="bar bar-gold" style={{ height: `${d.revenue / maxR * 100}%`, minHeight: 4, width: '46%' }} title={`${d.month}: ₫${d.revenue}M`} role="presentation" />
+                                    <div className="bar bar-blue" style={{ height: `${d.bookings / maxB * 100}%`, minHeight: 4, width: '46%' }} title={`${d.month}: ${d.bookings} đặt`} role="presentation" />
                                   </div>
                                   <div className="bar-label">{d.month}</div>
                                 </div>
@@ -557,8 +572,8 @@ export default function AdminDashboard() {
                       <div className="card">
                         <div className="card-header"><span className="card-title">🏆 Top phòng theo doanh thu</span></div>
                         <div className="card-body" style={{ padding: 0 }}>
-                          <table>
-                            <thead><tr><th>#</th><th>Phòng</th><th>Occupancy</th></tr></thead>
+                          <table aria-label="Top phòng theo doanh thu">
+                            <thead><tr><th scope="col">#</th><th scope="col">Phòng</th><th scope="col">Occupancy</th></tr></thead>
                             <tbody>
                               {analytics.top_rooms.map(r => (
                                 <tr key={r.rank}>
@@ -587,10 +602,10 @@ export default function AdminDashboard() {
                         <p style={{ color: 'var(--text2)', marginBottom: 16 }}>Hệ thống phân quyền theo vai trò, áp dụng Row-Level Security trong SQL Server.</p>
                         <div className="rbac-flow">
                           {['admin','manager','staff','customer'].map((r, i) => (
-                            <>
-                              <div key={r} className={`rbac-node ${r === 'admin' ? 'admin' : r === 'manager' ? 'manager' : ''}`}>{r.toUpperCase()}</div>
+                            <span key={r} style={{ display: 'contents' }}>
+                              <div className={`rbac-node ${r === 'admin' ? 'admin' : r === 'manager' ? 'manager' : ''}`}>{r.toUpperCase()}</div>
                               {i < 3 && <span className="rbac-arrow">→</span>}
-                            </>
+                            </span>
                           ))}
                         </div>
                         <div className="grid-cols-2" style={{ marginTop: 16 }}>
@@ -652,8 +667,8 @@ WITH (STATE = ON);`}</pre>
                         <span className="card-title">👥 Danh sách người dùng</span>
                         <span style={{ fontSize: 12, color: 'var(--text3)' }}>{users.length} người dùng</span>
                       </div>
-                      <table>
-                        <thead><tr><th>Người dùng</th><th>Email</th><th>SĐT</th><th>Vai trò</th><th>Trạng thái</th><th>Ngày tạo</th></tr></thead>
+                      <table aria-label="Danh sách người dùng">
+                        <thead><tr><th scope="col">Người dùng</th><th scope="col">Email</th><th scope="col">SĐT</th><th scope="col">Vai trò</th><th scope="col">Trạng thái</th><th scope="col">Ngày tạo</th></tr></thead>
                         <tbody>
                           {users.map(u => (
                             <tr key={u.user_id}>
@@ -683,8 +698,8 @@ WITH (STATE = ON);`}</pre>
                         <span className="card-title">🛏️ Loại phòng</span>
                         <span style={{ fontSize: 12, color: 'var(--text3)' }}>{rooms.length} loại phòng</span>
                       </div>
-                      <table>
-                        <thead><tr><th>Tên phòng</th><th>Khách sạn</th><th>Sức chứa</th><th>Giá hiện tại</th><th>Trống/Tổng</th><th>Trạng thái</th></tr></thead>
+                      <table aria-label="Danh sách loại phòng">
+                        <thead><tr><th scope="col">Tên phòng</th><th scope="col">Khách sạn</th><th scope="col">Sức chứa</th><th scope="col">Giá hiện tại</th><th scope="col">Trống/Tổng</th><th scope="col">Trạng thái</th></tr></thead>
                         <tbody>
                           {rooms.map(r => (
                             <tr key={r.room_type_id}>
@@ -735,12 +750,17 @@ WITH (STATE = ON);`}</pre>
                       <div className="card-header"><span className="card-title">💰 Cập nhật giá phòng</span></div>
                       <div className="card-body">
                         <div className="form-group">
-                          <label>Loại phòng</label>
-                          <select value={selRoom} onChange={e => { setSelRoom(e.target.value); setSuggestion(null); }}>
+                          <label htmlFor="pricing-room-select">Loại phòng</label>
+                          <select
+                            id="pricing-room-select"
+                            value={selRoom}
+                            onChange={e => { setSelRoom(e.target.value); setSuggestion(null); }}
+                            title="Chọn loại phòng để cập nhật giá"
+                          >
                             {rooms.map(r => <option key={r.room_type_id} value={r.room_type_id}>{r.name} — {r.hotel_name}</option>)}
                           </select>
                         </div>
-                        <div className="price-compare">
+                        <div className="price-compare" role="group" aria-label="So sánh giá">
                           <div className="price-box">
                             <div className="val">₫{fmt(currentPrice)}</div>
                             <div className="lbl">Giá hiện tại</div>
@@ -757,22 +777,36 @@ WITH (STATE = ON);`}</pre>
                           </div>
                         </div>
                         {Math.abs(priceDeltaPct) >= 50 && (
-                          <div className="alert-box alert-warning">⚠️ Biến động giá &gt;50% — alert_flag = 1 sẽ được kích hoạt</div>
+                          <div className="alert-box alert-warning" role="alert">⚠️ Biến động giá &gt;50% — alert_flag = 1 sẽ được kích hoạt</div>
                         )}
                         <div className="form-group">
-                          <label>Giá mới (₫)</label>
-                          <input type="number" value={newPrice} onChange={e => setNewPrice(+e.target.value)} />
+                          <label htmlFor="pricing-new-price">Giá mới (₫)</label>
+                          <input
+                            id="pricing-new-price"
+                            type="number"
+                            value={newPrice}
+                            onChange={e => setNewPrice(+e.target.value)}
+                            title="Nhập giá mới cho loại phòng"
+                            placeholder="VD: 2000000"
+                          />
                         </div>
                         <div className="form-group">
-                          <label>Lý do</label>
-                          <input type="text" value={priceReason} onChange={e => setPriceReason(e.target.value)} placeholder="VD: Peak season, High occupancy..." />
+                          <label htmlFor="pricing-reason">Lý do</label>
+                          <input
+                            id="pricing-reason"
+                            type="text"
+                            value={priceReason}
+                            onChange={e => setPriceReason(e.target.value)}
+                            placeholder="VD: Peak season, High occupancy..."
+                            title="Nhập lý do thay đổi giá"
+                          />
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
                           <button className="btn btn-ghost" onClick={handleGetSuggestion}>🤖 AI Đề xuất</button>
                           <button className="btn btn-primary" onClick={handlePriceUpdate}>✓ Cập nhật giá</button>
                         </div>
                         {suggestion && (
-                          <div className="suggestion-box">
+                          <div className="suggestion-box" role="region" aria-label="Đề xuất giá từ AI">
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent2)', marginBottom: 8 }}>🤖 Đề xuất AI</div>
                             <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>{suggestion.reasoning}</div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -805,8 +839,8 @@ WITH (STATE = ON);`}</pre>
                 {page === 'history' && (
                   <div className="card">
                     <div className="card-header"><span className="card-title">📜 Lịch sử thay đổi giá</span><span style={{ fontSize: 11, color: 'var(--text3)' }}>Ghi bởi SQL Trigger</span></div>
-                    <table>
-                      <thead><tr><th>Phòng</th><th>Giá cũ</th><th>Giá mới</th><th>Thay đổi</th><th>Lý do</th><th>Người thay đổi</th><th>Alert</th><th>Thời gian</th></tr></thead>
+                    <table aria-label="Lịch sử thay đổi giá phòng">
+                      <thead><tr><th scope="col">Phòng</th><th scope="col">Giá cũ</th><th scope="col">Giá mới</th><th scope="col">Thay đổi</th><th scope="col">Lý do</th><th scope="col">Người thay đổi</th><th scope="col">Alert</th><th scope="col">Thời gian</th></tr></thead>
                       <tbody>
                         {priceHistory.map(p => (
                           <tr key={p.id}>
@@ -829,8 +863,8 @@ WITH (STATE = ON);`}</pre>
                 {page === 'rules' && (
                   <div className="card">
                     <div className="card-header"><span className="card-title">⚙️ Pricing Rules</span></div>
-                    <table>
-                      <thead><tr><th>Tên rule</th><th>Điều kiện</th><th>Hệ số</th><th>Ưu tiên</th><th>Trạng thái</th></tr></thead>
+                    <table aria-label="Danh sách pricing rules">
+                      <thead><tr><th scope="col">Tên rule</th><th scope="col">Điều kiện</th><th scope="col">Hệ số</th><th scope="col">Ưu tiên</th><th scope="col">Trạng thái</th></tr></thead>
                       <tbody>
                         {pricingRules.map(r => (
                           <tr key={r.rule_id}>
@@ -853,8 +887,8 @@ WITH (STATE = ON);`}</pre>
                       <div className="card">
                         <div className="card-header"><span className="card-title">📈 Window Functions — Revenue Rank</span></div>
                         <div className="card-body" style={{ padding: 0 }}>
-                          <table>
-                            <thead><tr><th>Rank</th><th>Phòng</th><th>Khách sạn</th><th>Doanh thu</th><th>Đặt phòng</th></tr></thead>
+                          <table aria-label="Xếp hạng doanh thu theo window function">
+                            <thead><tr><th scope="col">Rank</th><th scope="col">Phòng</th><th scope="col">Khách sạn</th><th scope="col">Doanh thu</th><th scope="col">Đặt phòng</th></tr></thead>
                             <tbody>
                               {analytics.top_rooms.map(r => (
                                 <tr key={r.rank}>
@@ -872,8 +906,8 @@ WITH (STATE = ON);`}</pre>
                       <div className="card">
                         <div className="card-header"><span className="card-title">📋 Bookings theo trạng thái</span></div>
                         <div className="card-body" style={{ padding: 0 }}>
-                          <table>
-                            <thead><tr><th>Khách</th><th>Phòng</th><th>Tổng tiền</th><th>Trạng thái</th></tr></thead>
+                          <table aria-label="Danh sách đặt phòng theo trạng thái">
+                            <thead><tr><th scope="col">Khách</th><th scope="col">Phòng</th><th scope="col">Tổng tiền</th><th scope="col">Trạng thái</th></tr></thead>
                             <tbody>
                               {bookings.map(b => (
                                 <tr key={b.booking_id}>
@@ -923,7 +957,7 @@ ORDER BY hotel_name, revenue_rank;`}</pre>
                         <div key={h.hotel_id} className="stat-card">
                           <div className="stat-label-s">🏨 {h.name}</div>
                           <div className="stat-value-s" style={{ color: h.occupancy_rate > 80 ? 'var(--success)' : h.occupancy_rate > 60 ? 'var(--gold)' : 'var(--danger)' }}>{h.occupancy_rate}%</div>
-                          <div style={{ marginTop: 8, background: 'var(--bg3)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                          <div style={{ marginTop: 8, background: 'var(--bg3)', borderRadius: 4, height: 6, overflow: 'hidden' }} role="progressbar" aria-valuenow={h.occupancy_rate} aria-valuemin={0} aria-valuemax={100} aria-label={`Tỷ lệ lấp đầy ${h.name}`}>
                             <div style={{ height: '100%', width: `${h.occupancy_rate}%`, background: h.occupancy_rate > 80 ? 'var(--success)' : h.occupancy_rate > 60 ? 'var(--gold)' : 'var(--danger)', borderRadius: 4 }} />
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: 'var(--text3)' }}>
@@ -941,22 +975,79 @@ ORDER BY hotel_name, revenue_rank;`}</pre>
         </main>
       </div>
 
-      {/* ── MODALS ── */}
+      {/* ── MODAL: ADD USER ── */}
       {modalOpen === 'addUser' && (
-        <div className="modal-overlay" onClick={() => setModalOpen(null)}>
+        <div className="modal-overlay" onClick={() => setModalOpen(null)} role="dialog" aria-modal="true" aria-labelledby="modal-user-title">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <div className="modal-title">👤 Thêm người dùng mới</div>
-              <button className="modal-close" onClick={() => setModalOpen(null)}>✕</button>
+              <div className="modal-title" id="modal-user-title">👤 Thêm người dùng mới</div>
+              <button className="modal-close" onClick={() => setModalOpen(null)} title="Đóng modal" aria-label="Đóng modal thêm người dùng">✕</button>
             </div>
             <div className="modal-body">
               <div className="form-row">
-                <div className="form-group"><label>Họ và tên</label><input type="text" placeholder="Nguyễn Văn A" /></div>
-                <div className="form-group"><label>SĐT</label><input type="text" placeholder="0901234567" /></div>
+                <div className="form-group">
+                  <label htmlFor="user-firstname">Tên</label>
+                  <input
+                    id="user-firstname"
+                    type="text"
+                    value={modalUserName}
+                    onChange={e => setModalUserName(e.target.value)}
+                    placeholder="Nguyễn Văn A"
+                    title="Nhập tên người dùng"
+                    autoComplete="given-name"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="user-phone">SĐT</label>
+                  <input
+                    id="user-phone"
+                    type="tel"
+                    value={modalUserPhone}
+                    onChange={e => setModalUserPhone(e.target.value)}
+                    placeholder="0901234567"
+                    title="Nhập số điện thoại"
+                    autoComplete="tel"
+                  />
+                </div>
               </div>
-              <div className="form-group"><label>Email</label><input type="email" placeholder="user@example.com" /></div>
-              <div className="form-group"><label>Mật khẩu (sẽ được bcrypt hash)</label><input type="password" placeholder="Tối thiểu 8 ký tự" /></div>
-              <div className="form-group"><label>Vai trò</label><select><option>customer</option><option>staff</option><option>manager</option><option>admin</option></select></div>
+              <div className="form-group">
+                <label htmlFor="user-email">Email</label>
+                <input
+                  id="user-email"
+                  type="email"
+                  value={modalUserEmail}
+                  onChange={e => setModalUserEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  title="Nhập địa chỉ email"
+                  autoComplete="email"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="user-password">Mật khẩu (sẽ được bcrypt hash)</label>
+                <input
+                  id="user-password"
+                  type="password"
+                  value={modalUserPassword}
+                  onChange={e => setModalUserPassword(e.target.value)}
+                  placeholder="Tối thiểu 8 ký tự"
+                  title="Nhập mật khẩu tối thiểu 8 ký tự"
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="user-role">Vai trò</label>
+                <select
+                  id="user-role"
+                  value={modalUserRole}
+                  onChange={e => setModalUserRole(e.target.value)}
+                  title="Chọn vai trò người dùng"
+                >
+                  <option value="customer">customer</option>
+                  <option value="staff">staff</option>
+                  <option value="manager">manager</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setModalOpen(null)}>Hủy</button>
@@ -966,24 +1057,87 @@ ORDER BY hotel_name, revenue_rank;`}</pre>
         </div>
       )}
 
+      {/* ── MODAL: ADD ROOM ── */}
       {modalOpen === 'addRoom' && (
-        <div className="modal-overlay" onClick={() => setModalOpen(null)}>
+        <div className="modal-overlay" onClick={() => setModalOpen(null)} role="dialog" aria-modal="true" aria-labelledby="modal-room-title">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <div className="modal-title">🛏️ Thêm loại phòng mới</div>
-              <button className="modal-close" onClick={() => setModalOpen(null)}>✕</button>
+              <div className="modal-title" id="modal-room-title">🛏️ Thêm loại phòng mới</div>
+              <button className="modal-close" onClick={() => setModalOpen(null)} title="Đóng modal" aria-label="Đóng modal thêm loại phòng">✕</button>
             </div>
             <div className="modal-body">
-              <div className="form-group"><label>Tên loại phòng</label><input type="text" placeholder="VD: Deluxe Ocean View" /></div>
-              <div className="form-row">
-                <div className="form-group"><label>Khách sạn</label><select>{hotels.map(h => <option key={h.hotel_id}>{h.name}</option>)}</select></div>
-                <div className="form-group"><label>Sức chứa</label><input type="number" defaultValue={2} min={1} max={10} /></div>
+              <div className="form-group">
+                <label htmlFor="room-name">Tên loại phòng</label>
+                <input
+                  id="room-name"
+                  type="text"
+                  value={modalRoomName}
+                  onChange={e => setModalRoomName(e.target.value)}
+                  placeholder="VD: Deluxe Ocean View"
+                  title="Nhập tên loại phòng"
+                />
               </div>
               <div className="form-row">
-                <div className="form-group"><label>Giá hiện tại (₫)</label><input type="number" placeholder="2000000" /></div>
-                <div className="form-group"><label>Tổng số phòng</label><input type="number" placeholder="10" /></div>
+                <div className="form-group">
+                  <label htmlFor="room-hotel">Khách sạn</label>
+                  <select
+                    id="room-hotel"
+                    value={modalRoomHotel}
+                    onChange={e => setModalRoomHotel(e.target.value)}
+                    title="Chọn khách sạn"
+                  >
+                    {hotels.map(h => <option key={h.hotel_id} value={h.hotel_id}>{h.name}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="room-capacity">Sức chứa</label>
+                  <input
+                    id="room-capacity"
+                    type="number"
+                    value={modalRoomCapacity}
+                    onChange={e => setModalRoomCapacity(+e.target.value)}
+                    min={1}
+                    max={10}
+                    title="Nhập sức chứa phòng (số khách tối đa)"
+                    placeholder="2"
+                  />
+                </div>
               </div>
-              <div className="form-group"><label>Mô tả</label><textarea rows={3} placeholder="Mô tả ngắn..." /></div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="room-price">Giá hiện tại (₫)</label>
+                  <input
+                    id="room-price"
+                    type="number"
+                    value={modalRoomPrice}
+                    onChange={e => setModalRoomPrice(+e.target.value)}
+                    placeholder="2000000"
+                    title="Nhập giá phòng theo VND"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="room-total">Tổng số phòng</label>
+                  <input
+                    id="room-total"
+                    type="number"
+                    value={modalRoomTotal}
+                    onChange={e => setModalRoomTotal(+e.target.value)}
+                    placeholder="10"
+                    title="Nhập tổng số phòng loại này"
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label htmlFor="room-description">Mô tả</label>
+                <textarea
+                  id="room-description"
+                  rows={3}
+                  value={modalRoomDesc}
+                  onChange={e => setModalRoomDesc(e.target.value)}
+                  placeholder="Mô tả ngắn về loại phòng..."
+                  title="Nhập mô tả ngắn về loại phòng"
+                />
+              </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setModalOpen(null)}>Hủy</button>
@@ -995,7 +1149,7 @@ ORDER BY hotel_name, revenue_rank;`}</pre>
 
       {/* Toast */}
       {toast && (
-        <div className={`toast-fixed toast-${toast.type}`}>
+        <div className={`toast-fixed toast-${toast.type}`} role="alert" aria-live="polite">
           <span>{toast.type === 'success' ? '✅' : toast.type === 'warning' ? '⚠️' : '❌'}</span>
           <span>{toast.msg}</span>
         </div>
