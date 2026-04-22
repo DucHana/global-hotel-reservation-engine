@@ -4,13 +4,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
-import { HotelsModule } from './modules/hotels/hotels.module';
-import { RoomsModule } from './modules/rooms/rooms.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { HotelsModule } from './modules/hotels/hotels.module';
+import { RoomsModule } from './modules/rooms/rooms.module';
 
-// Import tất cả Entities
+// Entities
 import { User } from './database/entities/user.entity';
 import { Hotel } from './database/entities/hotel.entity';
 import { RoomType } from './database/entities/room-type.entity';
@@ -18,6 +18,9 @@ import { Booking } from './database/entities/booking.entity';
 import { PriceHistory } from './database/entities/price-history.entity';
 import { PricingRule } from './database/entities/pricing-rule.entity';
 import { PricingSuggestion } from './database/entities/pricing-suggestion.entity';
+
+// Health
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -28,13 +31,11 @@ import { PricingSuggestion } from './database/entities/pricing-suggestion.entity
 
     TypeOrmModule.forRoot({
       type: 'mssql',
-      host: process.env.DB_HOST || 'LAPTOP-4CRC7NPS',
+      host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT || '1433'),
       username: process.env.DB_USER || 'hotel_manager',
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME || 'hotel_management',
-
-      // ✅ Import entities trực tiếp (không dùng wildcard)
       entities: [
         User,
         Hotel,
@@ -44,10 +45,8 @@ import { PricingSuggestion } from './database/entities/pricing-suggestion.entity
         PricingRule,
         PricingSuggestion,
       ],
-
-      synchronize: false, // ⚠ Set false vì đã có schema
-      logging: true, // Để debug SQL queries
-      
+      synchronize: false,
+      logging: false,
       options: {
         encrypt: false,
         trustServerCertificate: true,
@@ -62,5 +61,6 @@ import { PricingSuggestion } from './database/entities/pricing-suggestion.entity
     PricingModule,
     AnalyticsModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}

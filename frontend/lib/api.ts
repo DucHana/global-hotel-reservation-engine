@@ -9,7 +9,7 @@ import {
 } from './mockData';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'false';
 
 // ── Token helpers ──
 const TOKEN_KEY   = 'luxestay_token';
