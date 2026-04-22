@@ -8,7 +8,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
 
-  await app.listen(process.env.PORT || 3000);
+  await app.listen(process.env.PORT || 3001);
   console.log(`🚀 NestJS API running on port ${process.env.PORT || 3000}`);
 }
 bootstrap();

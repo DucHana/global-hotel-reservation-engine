@@ -1,62 +1,55 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RoomsService } from './rooms.service';
 
 @Controller('api/rooms')
 export class RoomsController {
-  constructor(@InjectDataSource() private dataSource: DataSource) {}
+  constructor(private roomsService: RoomsService) {}
 
   @Get()
-  async getAll(@Query('hotelId') hotelId?: string) {
-    const params: any[] = [];
-    let where = 'rt.is_active = 1';
-    if (hotelId) {
-      params.push(Number(hotelId));
-      where += ` AND rt.hotel_id = @${params.length - 1}`;
-    }
-
-    const rows = await this.dataSource.query(`
-      SELECT
-        rt.room_type_id,
-        rt.hotel_id,
-        h.name AS hotel_name,
-        rt.name,
-        rt.capacity,
-        rt.current_price AS base_price,
-        rt.total_rooms,
-        rt.description,
-        rt.is_active,
-        (
-          rt.total_rooms - ISNULL((
-            SELECT COUNT(DISTINCT b.booking_id)
-            FROM bookings b
-            WHERE b.room_type_id = rt.room_type_id
-              AND b.status = 'confirmed'
-              AND CAST(GETDATE() AS DATE) BETWEEN b.check_in_date AND b.check_out_date
-          ), 0)
-        ) AS available_rooms
-      FROM room_types rt
-      JOIN hotels h ON h.hotel_id = rt.hotel_id
-      WHERE rt.is_active = 1
-        ${hotelId ? 'AND rt.hotel_id = ' + Number(hotelId) : ''}
-    `, params);
-
-    const data = rows.map((r: any) => ({
-      room_type_id: String(r.room_type_id),
-      hotel_id: String(r.hotel_id),
-      hotel_name: r.hotel_name,
-      name: r.name,
-      capacity: Number(r.capacity),
-      base_price: Number(r.base_price),
-      cap_price: Number(r.base_price) * 2,
-      floor_price: Math.round(Number(r.base_price) * 0.5),
-      total_rooms: Number(r.total_rooms),
-      available_rooms: Math.max(0, Number(r.available_rooms)),
-      description: r.description || '',
-      amenities: ['WiFi', 'Smart TV', 'Air conditioning'],
-      is_active: r.is_active === true || r.is_active === 1,
-    }));
-
+  async getAll(@Query('hotelId') hotelId?: number) {
+    const data = await this.roomsService.findAll(hotelId);
     return { data, total: data.length };
+  }
+
+  @Get(':id')
+  async getById(@Param('id') roomTypeId: number) {
+    return await this.roomsService.findById(roomTypeId);
+  }
+
+  @Post()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin', 'manager')
+  async create(
+    @Body()
+    createRoomDto: {
+      hotel_id: number;
+      name: string;
+      description?: string;
+      capacity: number;
+      base_price: number;
+      current_price: number;
+      total_rooms: number;
+    },
+  ) {
+    const room = await this.roomsService.create(createRoomDto);
+    return { message: 'Tạo loại phòng thành công', data: room };
+  }
+
+  @Put(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin', 'manager')
+  async update(@Param('id') roomTypeId: number, @Body() updateRoomDto: any) {
+    const room = await this.roomsService.update(roomTypeId, updateRoomDto);
+    return { message: 'Cập nhật loại phòng thành công', data: room };
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
+  async delete(@Param('id') roomTypeId: number) {
+    return await this.roomsService.delete(roomTypeId);
   }
 }

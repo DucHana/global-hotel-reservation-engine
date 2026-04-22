@@ -1,53 +1,53 @@
-// backend/src/modules/hotels/hotels.controller.ts
-import { Controller, Get } from '@nestjs/common';
-import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { HotelsService } from './hotels.service';
 
 @Controller('api/hotels')
 export class HotelsController {
-  constructor(@InjectDataSource() private dataSource: DataSource) {}
+  constructor(private hotelsService: HotelsService) {}
 
   @Get()
   async getAll() {
-    const rows = await this.dataSource.query(`
-      SELECT
-        h.hotel_id,
-        h.name,
-        h.address,
-        h.city,
-        h.phone,
-        h.email,
-        h.is_active,
-        ISNULL(SUM(rt.total_rooms), 0) AS total_rooms,
-        ISNULL(ROUND(
-          100.0
-          * COUNT(DISTINCT CASE WHEN b.status = 'confirmed' THEN b.booking_id END)
-          / NULLIF(SUM(rt.total_rooms), 0),
-        1), 0) AS occupancy_rate
-      FROM hotels h
-      LEFT JOIN room_types rt
-        ON rt.hotel_id = h.hotel_id AND rt.is_active = 1
-      LEFT JOIN bookings b
-        ON b.room_type_id = rt.room_type_id
-        AND b.status = 'confirmed'
-        AND CAST(GETDATE() AS DATE) BETWEEN b.check_in_date AND b.check_out_date
-      WHERE h.is_active = 1
-      GROUP BY h.hotel_id, h.name, h.address, h.city, h.phone, h.email, h.is_active
-    `);
-
-    const data = rows.map((h: any) => ({
-      hotel_id: String(h.hotel_id),
-      name: h.name,
-      address: h.address,
-      city: h.city,
-      star_rating: 5,
-      total_rooms: Number(h.total_rooms),
-      occupancy_rate: Number(h.occupancy_rate),
-      is_active: h.is_active === true || h.is_active === 1,
-      phone: h.phone || '',
-      email: h.email || '',
-    }));
-
+    const data = await this.hotelsService.findAll();
     return { data, total: data.length };
+  }
+
+  @Get(':id')
+  async getById(@Param('id') hotelId: number) {
+    return await this.hotelsService.findById(hotelId);
+  }
+
+  @Post()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
+  async create(
+    @Body()
+    createHotelDto: {
+      name: string;
+      address: string;
+      city: string;
+      phone?: string;
+      email?: string;
+    },
+  ) {
+    const hotel = await this.hotelsService.create(createHotelDto);
+    return { message: 'Tạo khách sạn thành công', data: hotel };
+  }
+
+  @Put(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin', 'manager')
+  async update(@Param('id') hotelId: number, @Body() updateHotelDto: any) {
+    const hotel = await this.hotelsService.update(hotelId, updateHotelDto);
+    return { message: 'Cập nhật khách sạn thành công', data: hotel };
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
+  async delete(@Param('id') hotelId: number) {
+    return await this.hotelsService.delete(hotelId);
   }
 }

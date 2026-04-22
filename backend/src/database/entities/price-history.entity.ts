@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, CreateDateColumn, ForeignKey } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  Index,
+  CreateDateColumn,
+  ForeignKey,
+  JoinColumn,
+} from 'typeorm';
 import { RoomType } from './room-type.entity';
 import { User } from './user.entity';
 
@@ -21,7 +30,7 @@ export class PriceHistory {
   new_price!: number;
 
   @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
-  change_pct!: number;
+  change_pct?: number | null;
 
   @Column({ type: 'bigint' })
   @ForeignKey(() => User)
@@ -31,14 +40,17 @@ export class PriceHistory {
   alert_flag!: number;
 
   @Column({ type: 'nvarchar', length: 255, nullable: true })
-  note!: string;
+  note?: string | null;
 
   @CreateDateColumn()
   changed_at!: Date;
 
-  @ManyToOne(() => RoomType)
-  roomType!: RoomType;
+  // Relations - không tự động load
+  @ManyToOne(() => RoomType, { eager: false })
+  @JoinColumn({ name: 'room_type_id' })
+  roomType?: RoomType;
 
-  @ManyToOne(() => User)
-  changedByUser!: User;
+  @ManyToOne(() => User, { eager: false })
+  @JoinColumn({ name: 'changed_by' })
+  changedByUser?: User;
 }

@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, CreateDateColumn, ForeignKey } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  Index,
+  CreateDateColumn,
+  ForeignKey,
+  JoinColumn,
+} from 'typeorm';
 import { Hotel } from './hotel.entity';
 
 @Entity('pricing_rules')
@@ -10,7 +19,7 @@ export class PricingRule {
 
   @Column({ type: 'bigint', nullable: true })
   @ForeignKey(() => Hotel)
-  hotel_id!: number;
+  hotel_id?: number | null;
 
   @Column({ type: 'nvarchar', length: 100 })
   rule_name!: string;
@@ -31,16 +40,16 @@ export class PricingRule {
   adjustment_value!: number;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
-  max_price_cap!: number;
+  max_price_cap?: number | null;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
-  min_price_floor!: number;
+  min_price_floor?: number | null;
 
   @Column({ type: 'date', nullable: true })
-  valid_from!: Date;
+  valid_from?: Date | null;
 
   @Column({ type: 'date', nullable: true })
-  valid_to!: Date;
+  valid_to?: Date | null;
 
   @Column({ type: 'tinyint', default: 5 })
   priority!: number;
@@ -51,6 +60,7 @@ export class PricingRule {
   @CreateDateColumn()
   created_at!: Date;
 
-  @ManyToOne(() => Hotel)
-  hotel!: Hotel;
+  @ManyToOne(() => Hotel, { eager: false })
+  @JoinColumn({ name: 'hotel_id' })
+  hotel?: Hotel;
 }

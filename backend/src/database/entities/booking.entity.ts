@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, CreateDateColumn, ForeignKey } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  Index,
+  CreateDateColumn,
+  ForeignKey,
+  JoinColumn,
+} from 'typeorm';
 import { User } from './user.entity';
 import { RoomType } from './room-type.entity';
 
@@ -34,9 +43,11 @@ export class Booking {
   @CreateDateColumn()
   created_at!: Date;
 
-  @ManyToOne(() => User)
-  user!: User;
+  @ManyToOne(() => User, { eager: false })
+  @JoinColumn({ name: 'user_id' })
+  user?: User;
 
-  @ManyToOne(() => RoomType)
-  roomType!: RoomType;
+  @ManyToOne(() => RoomType, { eager: false })
+  @JoinColumn({ name: 'room_type_id' })
+  roomType?: RoomType;
 }

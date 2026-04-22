@@ -1,4 +1,14 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, CreateDateColumn, UpdateDateColumn, ForeignKey } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  Index,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ForeignKey,
+  JoinColumn,
+} from 'typeorm';
 import { Hotel } from './hotel.entity';
 
 @Entity('room_types')
@@ -16,10 +26,13 @@ export class RoomType {
   name!: string;
 
   @Column({ type: 'nvarchar', nullable: true })
-  description!: string;
+  description?: string | null;
 
   @Column({ type: 'tinyint' })
   capacity!: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2 })
+  base_price!: number;
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   current_price!: number;
@@ -36,6 +49,7 @@ export class RoomType {
   @UpdateDateColumn()
   updated_at!: Date;
 
-  @ManyToOne(() => Hotel)
-  hotel!: Hotel;
+  @ManyToOne(() => Hotel, { eager: false })
+  @JoinColumn({ name: 'hotel_id' })
+  hotel?: Hotel;
 }

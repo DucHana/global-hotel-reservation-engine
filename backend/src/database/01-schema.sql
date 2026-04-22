@@ -49,20 +49,22 @@ CREATE TABLE room_types (
     name NVARCHAR(100) NOT NULL,
     description NVARCHAR(MAX) NULL,
     capacity TINYINT NOT NULL,
-    current_price DECIMAL(12,2) NOT NULL,
+    base_price DECIMAL(12, 2) NOT NULL,           -- ✅ Thêm base_price
+    current_price DECIMAL(12, 2) NOT NULL,
     total_rooms SMALLINT NOT NULL,
     is_active BIT DEFAULT 1,
     created_at DATETIME DEFAULT GETDATE(),
     updated_at DATETIME DEFAULT GETDATE(),
     
-    CONSTRAINT fk_hotel FOREIGN KEY (hotel_id) REFERENCES hotels(hotel_id),
+    CONSTRAINT fk_hotel_room FOREIGN KEY (hotel_id) REFERENCES hotels(hotel_id),
     CONSTRAINT chk_capacity CHECK (capacity > 0),
-    CONSTRAINT chk_price CHECK (current_price > 0),
     CONSTRAINT chk_total_rooms CHECK (total_rooms > 0),
+    CONSTRAINT chk_prices CHECK (base_price > 0 AND current_price > 0),
     
-    INDEX idx_hotel (hotel_id),
-    INDEX idx_active (is_active)
+    INDEX idx_hotel_room (hotel_id),
+    INDEX idx_active_room (is_active)
 );
+
 
 -- 4️⃣ PRICE_HISTORY TABLE (Temporal Table - Lịch sử giá) ⭐⭐⭐
 CREATE TABLE price_history (
