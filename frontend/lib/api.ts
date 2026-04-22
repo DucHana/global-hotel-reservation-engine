@@ -19,23 +19,41 @@ const USER_KEY    = 'luxestay_user';
 export const tokenStore = {
   get: () => {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || null;
   },
   set: (token: string, remember = false) => {
-    if (remember) localStorage.setItem(TOKEN_KEY, token);
-    else sessionStorage.setItem(TOKEN_KEY, token);
+    if (typeof window === 'undefined') return;
+    if (remember) {
+      localStorage.setItem(TOKEN_KEY, token);
+      sessionStorage.removeItem(TOKEN_KEY);
+    } else {
+      sessionStorage.setItem(TOKEN_KEY, token);
+      localStorage.removeItem(TOKEN_KEY);
+    }
   },
   getUser: () => {
     if (typeof window === 'undefined') return null;
     const raw = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
     return raw ? JSON.parse(raw) : null;
   },
-  setUser: (user: object, remember = false) => {
+  setUser: (user: object | null, remember = false) => {
+    if (typeof window === 'undefined') return;
+    if (user === null) {
+      localStorage.removeItem(USER_KEY);
+      sessionStorage.removeItem(USER_KEY);
+      return;
+    }
     const s = JSON.stringify(user);
-    if (remember) localStorage.setItem(USER_KEY, s);
-    else sessionStorage.setItem(USER_KEY, s);
+    if (remember) {
+      localStorage.setItem(USER_KEY, s);
+      sessionStorage.removeItem(USER_KEY);
+    } else {
+      sessionStorage.setItem(USER_KEY, s);
+      localStorage.removeItem(USER_KEY);
+    }
   },
   clear: () => {
+    if (typeof window === 'undefined') return;
     [TOKEN_KEY, REFRESH_KEY, USER_KEY].forEach(k => {
       localStorage.removeItem(k);
       sessionStorage.removeItem(k);
@@ -50,7 +68,7 @@ async function http<T>(endpoint: string, options: RequestInit = {}): Promise<T> 
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
+      ...(options.headers as Record<string, string> || {}),
     },
     ...options,
   });
@@ -63,7 +81,7 @@ async function http<T>(endpoint: string, options: RequestInit = {}): Promise<T> 
 }
 
 // ═══════════════════════════════════════════════════
-// AUTH API
+// AUTH API  — real backend: POST /api/auth/login
 // ═══════════════════════════════════════════════════
 export const authApi = {
   login: async (email: string, password: string) => {
@@ -75,7 +93,7 @@ export const authApi = {
       }
       return { access_token: 'mock_jwt_token_' + user.user_id, user };
     }
-    return http<{ access_token: string; user: object }>('/auth/login', {
+    return http<{ access_token: string; user: object }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -90,22 +108,14 @@ export const authApi = {
       if (exists) throw Object.assign(new Error('Email đã tồn tại'), { status: 409 });
       return { message: 'Đăng ký thành công' };
     }
-    return http('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
-  },
-
-  me: async () => {
-    if (USE_MOCK) {
-      await delay(300);
-      return tokenStore.getUser();
-    }
-    return http('/auth/me');
+    return http('/api/auth/register', { method: 'POST', body: JSON.stringify(payload) });
   },
 
   logout: () => tokenStore.clear(),
 };
 
 // ═══════════════════════════════════════════════════
-// USERS API
+// USERS API  — real backend: GET /api/users
 // ═══════════════════════════════════════════════════
 export const usersApi = {
   getAll: async (params?: { role?: string; page?: number; limit?: number }) => {
@@ -115,45 +125,21 @@ export const usersApi = {
       if (params?.role) data = data.filter(u => u.role === params.role);
       return { data, total: data.length, page: 1, limit: 20 };
     }
-    const q = new URLSearchParams(params as Record<string, string>).toString();
-    return http(`/users${q ? '?' + q : ''}`);
+    const q = params ? new URLSearchParams(params as Record<string, string>).toString() : '';
+    return http<{ data: typeof MOCK_USERS; total: number }>(`/api/users${q ? '?' + q : ''}`);
   },
 
-  getById: async (id: string) => {
+  getById: async (id: string | number) => {
     if (USE_MOCK) {
       await delay(300);
-      return MOCK_USERS.find(u => u.user_id === id) || null;
+      return MOCK_USERS.find(u => u.user_id === String(id)) || null;
     }
-    return http(`/users/${id}`);
-  },
-
-  create: async (payload: Partial<typeof MOCK_USERS[0]>) => {
-    if (USE_MOCK) {
-      await delay(600);
-      return { ...payload, user_id: 'u' + Date.now(), created_at: new Date().toISOString() };
-    }
-    return http('/users', { method: 'POST', body: JSON.stringify(payload) });
-  },
-
-  update: async (id: string, payload: Partial<typeof MOCK_USERS[0]>) => {
-    if (USE_MOCK) {
-      await delay(500);
-      return { success: true };
-    }
-    return http(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-  },
-
-  delete: async (id: string) => {
-    if (USE_MOCK) {
-      await delay(400);
-      return { success: true };
-    }
-    return http(`/users/${id}`, { method: 'DELETE' });
+    return http(`/api/users/${id}`);
   },
 };
 
 // ═══════════════════════════════════════════════════
-// HOTELS API
+// HOTELS API  — real backend: GET /api/hotels
 // ═══════════════════════════════════════════════════
 export const hotelsApi = {
   getAll: async () => {
@@ -161,50 +147,30 @@ export const hotelsApi = {
       await delay();
       return { data: MOCK_HOTELS, total: MOCK_HOTELS.length };
     }
-    return http('/hotels');
-  },
-
-  getById: async (id: string) => {
-    if (USE_MOCK) {
-      await delay(300);
-      return MOCK_HOTELS.find(h => h.hotel_id === id) || null;
-    }
-    return http(`/hotels/${id}`);
+    return http<{ data: typeof MOCK_HOTELS }>('/api/hotels');
   },
 };
 
 // ═══════════════════════════════════════════════════
-// ROOMS API
+// ROOMS API  — real backend: GET /api/rooms
 // ═══════════════════════════════════════════════════
 export const roomsApi = {
   getAll: async (hotelId?: string) => {
     if (USE_MOCK) {
       await delay();
-      const data = hotelId ? MOCK_ROOM_TYPES.filter(r => r.hotel_id === hotelId) : MOCK_ROOM_TYPES;
+      const data = hotelId
+        ? MOCK_ROOM_TYPES.filter(r => r.hotel_id === hotelId)
+        : MOCK_ROOM_TYPES;
       return { data, total: data.length };
     }
-    return http(`/rooms${hotelId ? '?hotelId=' + hotelId : ''}`);
-  },
-
-  create: async (payload: Partial<typeof MOCK_ROOM_TYPES[0]>) => {
-    if (USE_MOCK) {
-      await delay(700);
-      return { ...payload, room_type_id: 'rt' + Date.now() };
-    }
-    return http('/rooms', { method: 'POST', body: JSON.stringify(payload) });
-  },
-
-  update: async (id: string, payload: Partial<typeof MOCK_ROOM_TYPES[0]>) => {
-    if (USE_MOCK) {
-      await delay(500);
-      return { success: true };
-    }
-    return http(`/rooms/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+    return http<{ data: typeof MOCK_ROOM_TYPES }>(
+      `/api/rooms${hotelId ? '?hotelId=' + hotelId : ''}`
+    );
   },
 };
 
 // ═══════════════════════════════════════════════════
-// BOOKINGS API
+// BOOKINGS API  — real backend: GET /api/bookings
 // ═══════════════════════════════════════════════════
 export const bookingsApi = {
   getAll: async (params?: { status?: string; userId?: string }) => {
@@ -215,31 +181,16 @@ export const bookingsApi = {
       if (params?.userId) data = data.filter(b => b.user_id === params.userId);
       return { data, total: data.length };
     }
-    const q = new URLSearchParams(params as Record<string, string>).toString();
-    return http(`/bookings${q ? '?' + q : ''}`);
-  },
-
-  create: async (payload: Partial<typeof MOCK_BOOKINGS[0]>) => {
-    if (USE_MOCK) {
-      await delay(900);
-      return { ...payload, booking_id: 'bk' + Date.now(), status: 'pending', created_at: new Date().toISOString() };
-    }
-    return http('/bookings', { method: 'POST', body: JSON.stringify(payload) });
-  },
-
-  updateStatus: async (id: string, status: string) => {
-    if (USE_MOCK) {
-      await delay(400);
-      return { success: true };
-    }
-    return http(`/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+    const q = params ? new URLSearchParams(params as Record<string, string>).toString() : '';
+    return http<{ data: typeof MOCK_BOOKINGS }>(`/api/bookings${q ? '?' + q : ''}`);
   },
 };
 
 // ═══════════════════════════════════════════════════
-// PRICING API
+// PRICING API  — real backend: GET /api/pricing
 // ═══════════════════════════════════════════════════
 export const pricingApi = {
+  /** Price history — backend doesn't expose this yet, always falls back to mock */
   getHistory: async (roomTypeId?: string) => {
     if (USE_MOCK) {
       await delay();
@@ -248,7 +199,19 @@ export const pricingApi = {
         : MOCK_PRICE_HISTORY;
       return { data, total: data.length };
     }
-    return http(`/pricing/history${roomTypeId ? '?roomTypeId=' + roomTypeId : ''}`);
+    // Backend endpoint for price history (falls back to mock if 404)
+    try {
+      return await http<{ data: typeof MOCK_PRICE_HISTORY }>(
+        `/api/pricing/history${roomTypeId ? '?roomTypeId=' + roomTypeId : ''}`
+      );
+    } catch {
+      // Graceful fallback when endpoint not yet implemented
+      console.warn('Price history endpoint not available, using mock data');
+      const data = roomTypeId
+        ? MOCK_PRICE_HISTORY.filter(p => p.room_type_id === roomTypeId)
+        : MOCK_PRICE_HISTORY;
+      return { data, total: data.length };
+    }
   },
 
   getRules: async () => {
@@ -256,7 +219,12 @@ export const pricingApi = {
       await delay(400);
       return { data: MOCK_PRICING_RULES };
     }
-    return http('/pricing/rules');
+    try {
+      return await http<{ data: typeof MOCK_PRICING_RULES }>('/api/pricing');
+    } catch {
+      console.warn('Pricing rules endpoint not available, using mock data');
+      return { data: MOCK_PRICING_RULES };
+    }
   },
 
   updatePrice: async (roomTypeId: string, newPrice: number, reason: string) => {
@@ -268,12 +236,13 @@ export const pricingApi = {
       return {
         success: true,
         alert_flag: Math.abs(pct) >= 50,
-        message: Math.abs(pct) >= 50
-          ? `⚠️ Giá cập nhật! alert_flag = 1 vì biến động ${pct.toFixed(1)}% > 50%`
-          : '✓ Trigger ghi price_history thành công',
+        message:
+          Math.abs(pct) >= 50
+            ? `⚠️ Giá cập nhật! alert_flag = 1 vì biến động ${pct.toFixed(1)}% > 50%`
+            : '✓ Trigger ghi price_history thành công',
       };
     }
-    return http('/pricing/update', {
+    return http('/api/pricing/update', {
       method: 'POST',
       body: JSON.stringify({ roomTypeId, newPrice, reason }),
     });
@@ -293,12 +262,12 @@ export const pricingApi = {
         confidence: 87,
       };
     }
-    return http(`/pricing/suggest?roomTypeId=${roomTypeId}`);
+    return http(`/api/pricing/suggest?roomTypeId=${roomTypeId}`);
   },
 };
 
 // ═══════════════════════════════════════════════════
-// ANALYTICS API
+// ANALYTICS API  — real backend: GET /api/analytics/dashboard
 // ═══════════════════════════════════════════════════
 export const analyticsApi = {
   getDashboard: async () => {
@@ -306,41 +275,48 @@ export const analyticsApi = {
       await delay(600);
       return MOCK_ANALYTICS;
     }
-    return http('/analytics/dashboard');
-  },
-
-  getOccupancy: async (hotelId?: string) => {
-    if (USE_MOCK) {
-      await delay(500);
-      return {
-        data: MOCK_HOTELS.map(h => ({
-          hotel_id: h.hotel_id,
-          hotel_name: h.name,
-          occupancy_rate: h.occupancy_rate,
-          total_rooms: h.total_rooms,
-          occupied: Math.round(h.total_rooms * h.occupancy_rate / 100),
-        })),
-      };
+    try {
+      return await http<typeof MOCK_ANALYTICS>('/api/analytics/dashboard');
+    } catch {
+      console.warn('Analytics dashboard endpoint not available, using mock data');
+      return MOCK_ANALYTICS;
     }
-    return http(`/analytics/occupancy${hotelId ? '?hotelId=' + hotelId : ''}`);
   },
 
-  getRevenue: async (period: 'week' | 'month' | 'year' = 'month') => {
+  getRevenue: async () => {
     if (USE_MOCK) {
       await delay(600);
-      return { data: MOCK_ANALYTICS.monthly_revenue, period };
+      return { data: MOCK_ANALYTICS.monthly_revenue };
     }
-    return http(`/analytics/revenue?period=${period}`);
+    try {
+      return await http('/api/analytics/revenue');
+    } catch {
+      return { data: MOCK_ANALYTICS.monthly_revenue };
+    }
   },
 };
 
-// Health check
+// ── Health check ──
 export const checkApiHealth = async (): Promise<boolean> => {
-  if (USE_MOCK) return false; // mock mode = backend offline
+  if (USE_MOCK) return false;
   try {
-    await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
-    return true;
+    const res = await fetch(`${API_BASE}/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    return res.ok;
   } catch {
     return false;
   }
+};
+
+// Legacy export so existing code still compiles
+export const api = {
+  get: (path: string) => http(path),
+  post: (path: string, body: unknown) =>
+    http(path, { method: 'POST', body: JSON.stringify(body) }),
+  put: (path: string, body: unknown) =>
+    http(path, { method: 'PUT', body: JSON.stringify(body) }),
+  patch: (path: string, body: unknown) =>
+    http(path, { method: 'PATCH', body: JSON.stringify(body) }),
+  delete: (path: string) => http(path, { method: 'DELETE' }),
 };

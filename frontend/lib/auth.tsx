@@ -4,11 +4,11 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { authApi, tokenStore } from './api';
 
 export interface AuthUser {
-  user_id: string;
+  user_id: number | string;
   full_name: string;
   email: string;
   role: 'admin' | 'manager' | 'staff' | 'customer';
-  is_active: boolean;
+  is_active?: boolean;
 }
 
 interface AuthContextType {
@@ -16,6 +16,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string, remember?: boolean) => Promise<void>;
+  register: (fullName: string, email: string, password: string, phone?: string) => Promise<unknown>;
   logout: () => void;
 }
 
@@ -26,9 +27,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = tokenStore.getUser();
-    if (storedUser) setUser(storedUser as AuthUser);
-    setIsLoading(false);
+    try {
+      const storedUser = tokenStore.getUser();
+      if (storedUser) setUser(storedUser as AuthUser);
+    } catch (error) {
+      console.error('Error loading stored user:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const login = useCallback(async (email: string, password: string, remember = false) => {
@@ -38,13 +44,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
   }, []);
 
+  const register = useCallback(
+    async (fullName: string, email: string, password: string, phone?: string) => {
+      return authApi.register({ full_name: fullName, email, password, phone });
+    },
+    [],
+  );
+
   const logout = useCallback(() => {
     authApi.logout();
     setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, isAuthenticated: !!user, login, register, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
