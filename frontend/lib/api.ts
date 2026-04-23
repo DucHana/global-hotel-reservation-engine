@@ -8,8 +8,8 @@ import {
   MOCK_PRICE_HISTORY, MOCK_ANALYTICS, MOCK_PRICING_RULES, delay,
 } from './mockData';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'false';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
 
 // ── Token helpers ──
 const TOKEN_KEY   = 'luxestay_token';
