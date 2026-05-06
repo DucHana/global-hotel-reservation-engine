@@ -9,9 +9,20 @@ import { PricingModule } from './pricing/pricing.module';
 import { SearchLogsModule } from './search-logs/search-logs.module';
 import { ReportsModule } from './reports/reports.module';
 import { SupportModule } from './support/support.module';
+import { MongooseModule } from '@nestjs/mongoose';
 
 @Module({
-  imports: [UsersModule, AuthModule, RoomsModule, BookingsModule, PricingModule, SearchLogsModule, ReportsModule, SupportModule],
+  imports: [
+    MongooseModule.forRoot('mongodb://localhost/hotel-reservation'),
+    UsersModule,
+    AuthModule,
+    RoomsModule,
+    BookingsModule,
+    PricingModule,
+    SearchLogsModule,
+    ReportsModule,
+    SupportModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
