@@ -149,6 +149,23 @@ export const hotelsApi = {
     }
     return http<{ data: typeof MOCK_HOTELS }>('/api/hotels');
   },
+  create: async (data: any) => {
+    return http('/api/hotels', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  update: async (id: number, data: any) => {
+    return http(`/api/hotels/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  delete: async (id: number) => {
+    return http(`/api/hotels/${id}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 // ═══════════════════════════════════════════════════
@@ -164,8 +181,25 @@ export const roomsApi = {
       return { data, total: data.length };
     }
     return http<{ data: typeof MOCK_ROOM_TYPES }>(
-      `/api/rooms${hotelId ? '?hotelId=' + hotelId : ''}`
+      `/api/hotels/rooms/all${hotelId ? '?hotelId=' + hotelId : ''}`
     );
+  },
+  create: async (data: any) => {
+    return http('/api/hotels/rooms', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  update: async (id: number, data: any) => {
+    return http(`/api/hotels/rooms/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  delete: async (id: number) => {
+    return http(`/api/hotels/rooms/${id}`, {
+      method: 'DELETE',
+    });
   },
 };
 
@@ -242,9 +276,13 @@ export const pricingApi = {
             : '✓ Trigger ghi price_history thành công',
       };
     }
-    return http('/api/pricing/update', {
+    return http('/api/pricing/update-price', {
       method: 'POST',
-      body: JSON.stringify({ roomTypeId, newPrice, reason }),
+      body: JSON.stringify({ 
+        room_type_id: parseInt(roomTypeId), 
+        new_price: newPrice, 
+        reason 
+      }),
     });
   },
 
@@ -263,6 +301,32 @@ export const pricingApi = {
       };
     }
     return http(`/api/pricing/suggest?roomTypeId=${roomTypeId}`);
+  },
+
+  createRule: async (data: any) => {
+    return http('/api/pricing/rules', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  toggleRule: async (id: number) => {
+    return http(`/api/pricing/rules/${id}/toggle`, {
+      method: 'PATCH',
+    });
+  },
+
+  updateRule: async (id: number, data: any) => {
+    return http(`/api/pricing/rules/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteRule: async (id: number) => {
+    return http(`/api/pricing/rules/${id}`, {
+      method: 'DELETE',
+    });
   },
 };
 

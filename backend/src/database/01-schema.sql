@@ -6,6 +6,19 @@
 USE hotel_management
 GO
 
+-- 0️⃣ DROP EXISTING TABLES (Reverse order of FKs)
+IF OBJECT_ID('search_summary', 'U') IS NOT NULL DROP TABLE search_summary;
+IF OBJECT_ID('audit_logs', 'U') IS NOT NULL DROP TABLE audit_logs;
+IF OBJECT_ID('payments', 'U') IS NOT NULL DROP TABLE payments;
+IF OBJECT_ID('pricing_suggestions', 'U') IS NOT NULL DROP TABLE pricing_suggestions;
+IF OBJECT_ID('bookings', 'U') IS NOT NULL DROP TABLE bookings;
+IF OBJECT_ID('price_history', 'U') IS NOT NULL DROP TABLE price_history;
+IF OBJECT_ID('pricing_rules', 'U') IS NOT NULL DROP TABLE pricing_rules;
+IF OBJECT_ID('room_types', 'U') IS NOT NULL DROP TABLE room_types;
+IF OBJECT_ID('hotels', 'U') IS NOT NULL DROP TABLE hotels;
+IF OBJECT_ID('users', 'U') IS NOT NULL DROP TABLE users;
+GO
+
 -- 1️⃣ USERS TABLE (Xác thực & RBAC)
 CREATE TABLE users (
     user_id BIGINT PRIMARY KEY IDENTITY(1,1),

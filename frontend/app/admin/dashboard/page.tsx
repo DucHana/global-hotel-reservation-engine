@@ -19,7 +19,7 @@ const PAGE_TITLES: Record<PageId, string> = {
 };
 
 // ── Utility ──
-const fmt = (n: number) => n.toLocaleString('vi-VN');
+const fmt = (n: number) => (n !== undefined && n !== null) ? n.toLocaleString('vi-VN') : '0';
 const fmtM = (n: number) => (n >= 1000 ? (n / 1000).toFixed(1) + 'B' : n + 'M');
 
 export default function AdminDashboard() {
@@ -48,6 +48,17 @@ export default function AdminDashboard() {
   const [priceReason, setPriceReason] = useState('');
   const [suggestion, setSuggestion] = useState<{ suggested_price: number; reasoning: string; change_pct: number } | null>(null);
 
+  // Pricing rule form
+  const [ruleName, setRuleName] = useState('');
+  const [ruleType, setRuleType] = useState('occupancy');
+  const [tMin, setTMin] = useState(0);
+  const [tMax, setTMax] = useState(100);
+  const [adjType, setAdjType] = useState('percent');
+  const [adjVal, setAdjVal] = useState(0);
+  const [priority, setPriority] = useState(5);
+  const [validFrom, setValidFrom] = useState('');
+  const [validTo, setValidTo] = useState('');
+
   // Modal form states
   const [modalUserName, setModalUserName] = useState('');
   const [modalUserLastName, setModalUserLastName] = useState('');
@@ -57,16 +68,119 @@ export default function AdminDashboard() {
   const [modalUserRole, setModalUserRole] = useState('customer');
 
   const [modalRoomName, setModalRoomName] = useState('');
-  const [modalRoomHotel, setModalRoomHotel] = useState('');
+  const [modalRoomHotel, setModalRoomHotel] = useState<any>('');
   const [modalRoomCapacity, setModalRoomCapacity] = useState(2);
   const [modalRoomPrice, setModalRoomPrice] = useState(2000000);
   const [modalRoomTotal, setModalRoomTotal] = useState(10);
   const [modalRoomDesc, setModalRoomDesc] = useState('');
 
+  // Hotel form
+  const [modalHotelName, setModalHotelName] = useState('');
+  const [modalHotelCity, setModalHotelCity] = useState('');
+  const [modalHotelAddress, setModalHotelAddress] = useState('');
+  const [modalHotelPhone, setModalHotelPhone] = useState('');
+  const [modalHotelEmail, setModalHotelEmail] = useState('');
+  const [editingHotel, setEditingHotel] = useState<any>(null);
+  const [editingRule, setEditingRule] = useState<any>(null);
+  const [editingRoom, setEditingRoom] = useState<any>(null);
+
   const showToast = useCallback((msg: string, type: 'success' | 'warning' | 'error' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
   }, []);
+
+  const openEditRoomModal = (room: MockRoomType) => {
+    setEditingRoom(room);
+    setModalRoomName(room.name);
+    setModalRoomHotel(room.hotel_id.toString());
+    setModalRoomCapacity(room.capacity);
+    setModalRoomPrice(Number(room.base_price));
+    setModalRoomTotal(room.total_rooms);
+    setModalRoomDesc(room.description || '');
+    setModalOpen('addRoom');
+  };
+
+  const handleSaveRoom = async () => {
+    if (!modalRoomHotel) return showToast('Vui lòng chọn khách sạn', 'error');
+    try {
+      setLoading(true);
+      const payload = {
+        hotel_id: parseInt(modalRoomHotel),
+        name: modalRoomName,
+        capacity: modalRoomCapacity,
+        base_price: modalRoomPrice,
+        total_rooms: modalRoomTotal,
+        description: modalRoomDesc
+      };
+
+      if (editingRoom) {
+        await roomsApi.update(editingRoom.room_type_id, payload);
+        showToast('Cập nhật loại phòng thành công', 'success');
+      } else {
+        await roomsApi.create(payload);
+        showToast('Tạo loại phòng thành công', 'success');
+      }
+
+      setModalOpen(null);
+      setEditingRoom(null);
+      const res = await roomsApi.getAll() as { data: MockRoomType[] };
+      setRooms(res.data);
+    } catch (e: any) {
+      showToast(e.message || 'Lỗi khi lưu loại phòng', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteRoom = async (id: number) => {
+    if (!confirm('Bạn có chắc muốn xóa loại phòng này?')) return;
+    try {
+      await roomsApi.delete(id);
+      showToast('Xóa thành công', 'success');
+      const res = await roomsApi.getAll() as { data: MockRoomType[] };
+      setRooms(res.data);
+    } catch (e: any) {
+      showToast(e.message, 'error');
+    }
+  };
+
+  const handleDeleteHotel = async (id: number) => {
+    if (!confirm('Bạn có chắc muốn xóa chi nhánh này?')) return;
+    try {
+      await hotelsApi.delete(id);
+      showToast('Xóa thành công', 'success');
+      const res = await hotelsApi.getAll() as { data: MockHotel[] };
+      setHotels(res.data);
+    } catch (e: any) {
+      showToast(e.message, 'error');
+    }
+  };
+
+  const handleDeleteRule = async (id: number) => {
+    if (!confirm('Bạn có chắc muốn xóa quy tắc này?')) return;
+    try {
+      await pricingApi.deleteRule(id);
+      showToast('Xóa thành công', 'success');
+      const res = await pricingApi.getRules() as any;
+      setPricingRules(res.data);
+    } catch (e: any) {
+      showToast(e.message, 'error');
+    }
+  };
+
+  const openEditRuleModal = (rule: MockPricingRule) => {
+    setEditingRule(rule);
+    setRuleName(rule.rule_name);
+    setRuleType(rule.rule_type);
+    setTMin(rule.threshold_min);
+    setTMax(rule.threshold_max);
+    setAdjType(rule.adjustment_type);
+    setAdjVal(rule.adjustment_value);
+    setPriority(rule.priority);
+    setValidFrom(rule.valid_from ? rule.valid_from.split('T')[0] : '');
+    setValidTo(rule.valid_to ? rule.valid_to.split('T')[0] : '');
+    setModalOpen('addRule');
+  };
 
   // Auth guard
   useEffect(() => {
@@ -92,6 +206,10 @@ export default function AdminDashboard() {
         } else if (page === 'rooms') {
           const res = await roomsApi.getAll() as { data: MockRoomType[] };
           setRooms(res.data);
+          // Load hotels too for the dropdown
+          const hres = await hotelsApi.getAll() as { data: MockHotel[] };
+          setHotels(hres.data);
+          if (hres.data.length > 0) setModalRoomHotel(hres.data[0].hotel_id);
         } else if (page === 'hotels' || page === 'occupancy') {
           const res = await hotelsApi.getAll() as { data: MockHotel[] };
           setHotels(res.data);
@@ -121,28 +239,64 @@ export default function AdminDashboard() {
   }, [page, showToast]);
 
   const handlePriceUpdate = async () => {
+    if (!selRoom) return showToast('Vui lòng chọn loại phòng', 'error');
+    if (!newPrice || newPrice <= 0) return showToast('Giá phải lớn hơn 0', 'error');
     try {
-      const res = await pricingApi.updatePrice(selRoom, newPrice, priceReason) as { alert_flag: boolean; message: string };
-      showToast(res.message, res.alert_flag ? 'warning' : 'success');
+      setLoading(true);
+      const res = await pricingApi.updatePrice(String(selRoom), newPrice, priceReason) as any;
+      const alertFlag = res?.data?.alert_flag || res?.alert_flag;
+      showToast(res?.message || 'Cập nhật giá thành công', alertFlag ? 'warning' : 'success');
       const updated = await roomsApi.getAll() as { data: MockRoomType[] };
       setRooms(updated.data);
-    } catch {
-      showToast('Lỗi cập nhật giá', 'error');
+    } catch (e: any) {
+      showToast(e.message || 'Lỗi cập nhật giá — kiểm tra bạn đã đăng nhập chưa', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGetSuggestion = async () => {
+    if (!selRoom) return showToast('Vui lòng chọn loại phòng', 'error');
     try {
-      const data = await pricingApi.getSuggestion(selRoom) as { suggested_price: number; reasoning: string; change_pct: number };
+      setLoading(true);
+      const data = await pricingApi.getSuggestion(String(selRoom)) as any;
       setSuggestion(data);
-    } catch {
-      showToast('Lỗi lấy đề xuất', 'error');
+    } catch (e: any) {
+      showToast(e.message || 'Lỗi lấy đề xuất', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const selRoomData = rooms.find(r => r.room_type_id === selRoom);
-  const currentPrice = selRoomData?.base_price || 0;
-  const priceDeltaPct = currentPrice ? ((newPrice - currentPrice) / currentPrice * 100) : 0;
+  const handleSaveHotel = async () => {
+    if (!modalHotelName.trim() || !modalHotelCity.trim()) {
+      return showToast('Tên và thành phố là bắt buộc', 'error');
+    }
+    try {
+      setLoading(true);
+      const payload = { name: modalHotelName, city: modalHotelCity, address: modalHotelAddress, phone: modalHotelPhone, email: modalHotelEmail };
+      if (editingHotel) {
+        await hotelsApi.update(editingHotel.hotel_id, payload);
+        showToast('Cập nhật chi nhánh thành công', 'success');
+      } else {
+        await hotelsApi.create(payload);
+        showToast('Tạo chi nhánh thành công', 'success');
+      }
+      setModalOpen(null);
+      setEditingHotel(null);
+      const res = await hotelsApi.getAll() as { data: MockHotel[] };
+      setHotels(res.data);
+    } catch (e: any) {
+      showToast(e.message || 'Lỗi lưu chi nhánh', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selRoomData = rooms.find(r => String(r.room_type_id) === String(selRoom));
+  const basePrice = selRoomData?.base_price || 0;
+  const currentPrice = selRoomData?.current_price || 0;
+  const priceDeltaPct = basePrice ? ((newPrice - basePrice) / basePrice * 100) : 0;
 
   if (authLoading) return <div style={{ background: '#0a0d13', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f0a500', fontFamily: 'DM Sans, sans-serif', fontSize: 18 }}>Đang tải...</div>;
 
@@ -699,7 +853,7 @@ WITH (STATE = ON);`}</pre>
                         <span style={{ fontSize: 12, color: 'var(--text3)' }}>{rooms.length} loại phòng</span>
                       </div>
                       <table aria-label="Danh sách loại phòng">
-                        <thead><tr><th scope="col">Tên phòng</th><th scope="col">Khách sạn</th><th scope="col">Sức chứa</th><th scope="col">Giá hiện tại</th><th scope="col">Trống/Tổng</th><th scope="col">Trạng thái</th></tr></thead>
+                        <thead><tr><th scope="col">Tên phòng</th><th scope="col">Khách sạn</th><th scope="col">Sức chứa</th><th scope="col">Giá hiện tại</th><th scope="col">Trống/Tổng</th><th scope="col">Trạng thái</th><th scope="col">Thao tác</th></tr></thead>
                         <tbody>
                           {rooms.map(r => (
                             <tr key={r.room_type_id}>
@@ -709,6 +863,12 @@ WITH (STATE = ON);`}</pre>
                               <td style={{ color: 'var(--gold)', fontWeight: 600 }}>₫{fmt(r.base_price)}</td>
                               <td>{r.available_rooms}/{r.total_rooms}</td>
                               <td><span className="badge badge-active">Active</span></td>
+                              <td>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 10 }} onClick={() => openEditRoomModal(r)}>✏️</button>
+                                  <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 10 }} onClick={() => handleDeleteRoom(r.room_type_id)}>🗑️</button>
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -719,7 +879,12 @@ WITH (STATE = ON);`}</pre>
 
                 {/* ─── HOTELS ─── */}
                 {page === 'hotels' && (
-                  <div className="grid-cols-3">
+                  <div>
+                    <div className="page-header">
+                      <div />
+                      <button className="btn btn-primary" onClick={() => { setEditingHotel(null); setModalHotelName(''); setModalHotelCity(''); setModalHotelAddress(''); setModalHotelPhone(''); setModalHotelEmail(''); setModalOpen('hotel'); }}>+ Thêm chi nhánh</button>
+                    </div>
+                    <div className="grid-cols-3">
                     {hotels.map(h => (
                       <div key={h.hotel_id} className="card">
                         <div className="card-body" style={{ textAlign: 'center', padding: 28 }}>
@@ -737,9 +902,14 @@ WITH (STATE = ON);`}</pre>
                               <div style={{ fontSize: 11, color: 'var(--text3)' }}>Occupancy</div>
                             </div>
                           </div>
+                          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 10 }}>
+                            <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setEditingHotel(h); setModalHotelName(h.name); setModalHotelCity(h.city || ''); setModalHotelAddress(h.address || ''); setModalHotelPhone(h.phone || ''); setModalHotelEmail(h.email || ''); setModalOpen('hotel'); }}>Sửa</button>
+                              <button className="btn btn-danger" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => handleDeleteHotel(h.hotel_id)}>Xóa</button>
+                          </div>
                         </div>
                       </div>
                     ))}
+                    </div>
                   </div>
                 )}
 
@@ -754,27 +924,38 @@ WITH (STATE = ON);`}</pre>
                           <select
                             id="pricing-room-select"
                             value={selRoom}
-                            onChange={e => { setSelRoom(e.target.value); setSuggestion(null); }}
+                            onChange={e => { 
+                              const rId = e.target.value;
+                              setSelRoom(rId); 
+                              setSuggestion(null);
+                              // Tự động set giá mới bằng giá hiện tại khi đổi phòng
+                              const r = rooms.find(room => String(room.room_type_id) === String(rId));
+                              if (r) setNewPrice(Number(r.current_price));
+                            }}
                             title="Chọn loại phòng để cập nhật giá"
                           >
+                            <option value="">-- Chọn loại phòng --</option>
                             {rooms.map(r => <option key={r.room_type_id} value={r.room_type_id}>{r.name} — {r.hotel_name}</option>)}
                           </select>
                         </div>
                         <div className="price-compare" role="group" aria-label="So sánh giá">
                           <div className="price-box">
+                            <div className="val" style={{ color: 'var(--text2)' }}>₫{fmt(basePrice)}</div>
+                            <div className="lbl">Giá gốc (Niêm yết)</div>
+                          </div>
+                          <div className="price-box">
                             <div className="val">₫{fmt(currentPrice)}</div>
                             <div className="lbl">Giá hiện tại</div>
                           </div>
                           <div className="price-box">
-                            <div className="val" style={{ color: Math.abs(priceDeltaPct) >= 50 ? 'var(--danger)' : priceDeltaPct >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                              {priceDeltaPct >= 0 ? '▲ +' : '▼ '}{Math.abs(priceDeltaPct).toFixed(1)}%
-                            </div>
-                            <div className="lbl">Thay đổi</div>
-                          </div>
-                          <div className="price-box">
                             <div className="val" style={{ color: 'var(--gold)' }}>₫{fmt(newPrice)}</div>
-                            <div className="lbl">Giá mới</div>
+                            <div className="lbl">Giá mới (Sắp lưu)</div>
                           </div>
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: -8, marginBottom: 15, textAlign: 'center' }}>
+                          So với giá gốc: <span style={{ color: priceDeltaPct >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                            {priceDeltaPct >= 0 ? '▲ +' : '▼ '}{Math.abs(priceDeltaPct).toFixed(1)}%
+                          </span>
                         </div>
                         {Math.abs(priceDeltaPct) >= 50 && (
                           <div className="alert-box alert-warning" role="alert">⚠️ Biến động giá &gt;50% — alert_flag = 1 sẽ được kích hoạt</div>
@@ -806,13 +987,21 @@ WITH (STATE = ON);`}</pre>
                           <button className="btn btn-primary" onClick={handlePriceUpdate}>✓ Cập nhật giá</button>
                         </div>
                         {suggestion && (
-                          <div className="suggestion-box" role="region" aria-label="Đề xuất giá từ AI">
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent2)', marginBottom: 8 }}>🤖 Đề xuất AI</div>
-                            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>{suggestion.reasoning}</div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ color: 'var(--gold)', fontWeight: 700 }}>₫{fmt(suggestion.suggested_price)} (+{suggestion.change_pct}%)</span>
-                              <button className="btn btn-ghost" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => { setNewPrice(suggestion.suggested_price); setSuggestion(null); }}>
-                                ✓ Áp dụng
+                          <div className="suggestion-box" role="region" aria-label="Đề xuất giá từ AI" style={{ border: suggestion.is_new_room ? '1px dashed var(--gold)' : '1px solid var(--accent)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent2)' }}>🤖 Đề xuất AI</span>
+                              {suggestion.is_new_room && <span className="badge badge-inactive" style={{ background: 'rgba(240,165,0,0.2)', color: 'var(--gold)' }}>Phòng mới</span>}
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 12, lineHeight: 1.4 }}>{suggestion.reasoning}</div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
+                              <div>
+                                <div style={{ fontSize: 15, color: 'var(--gold)', fontWeight: 700 }}>₫{fmt(suggestion.suggested_price)}</div>
+                                <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                                  Lệch {suggestion.change_from_base >= 0 ? '+' : ''}{suggestion.change_from_base}% so với giá gốc
+                                </div>
+                              </div>
+                              <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => { setNewPrice(suggestion.suggested_price); setSuggestion(null); }}>
+                                Áp dụng ngay
                               </button>
                             </div>
                           </div>
@@ -842,14 +1031,17 @@ WITH (STATE = ON);`}</pre>
                     <table aria-label="Lịch sử thay đổi giá phòng">
                       <thead><tr><th scope="col">Phòng</th><th scope="col">Giá cũ</th><th scope="col">Giá mới</th><th scope="col">Thay đổi</th><th scope="col">Lý do</th><th scope="col">Người thay đổi</th><th scope="col">Alert</th><th scope="col">Thời gian</th></tr></thead>
                       <tbody>
-                        {priceHistory.map(p => (
-                          <tr key={p.id}>
-                            <td style={{ fontWeight: 600, color: 'var(--text)' }}>{p.room_type_name}</td>
+                        {priceHistory.map((p, idx) => (
+                          <tr key={p.price_history_id || idx}>
+                            <td>
+                              <div style={{ fontWeight: 600, color: 'var(--text)' }}>{p.room_type_name || '—'}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>{p.hotel_name}</div>
+                            </td>
                             <td style={{ fontSize: 12 }}>₫{fmt(p.old_price)}</td>
                             <td style={{ color: 'var(--gold)', fontWeight: 600 }}>₫{fmt(p.new_price)}</td>
-                            <td><span style={{ color: p.change_pct >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>{p.change_pct >= 0 ? '+' : ''}{p.change_pct}%</span></td>
-                            <td style={{ fontSize: 12, maxWidth: 160 }}>{p.reason}</td>
-                            <td style={{ fontSize: 11, color: 'var(--text3)' }}>{p.changed_by}</td>
+                            <td><span style={{ color: Number(p.change_pct) >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>{Number(p.change_pct) >= 0 ? '+' : ''}{Number(p.change_pct).toFixed(2)}%</span></td>
+                            <td style={{ fontSize: 12, maxWidth: 160, color: 'var(--text2)' }}>{p.note || '—'}</td>
+                            <td style={{ fontSize: 11, color: 'var(--text3)' }}>{p.changed_by_name || `User #${p.changed_by}`}</td>
                             <td>{p.alert_flag ? <span className="badge badge-inactive">⚠ Alert</span> : <span className="badge badge-active">✓ OK</span>}</td>
                             <td style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date(p.changed_at).toLocaleString('vi-VN')}</td>
                           </tr>
@@ -862,17 +1054,42 @@ WITH (STATE = ON);`}</pre>
                 {/* ─── PRICING RULES ─── */}
                 {page === 'rules' && (
                   <div className="card">
-                    <div className="card-header"><span className="card-title">⚙️ Pricing Rules</span></div>
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="card-title">⚙️ Pricing Rules</span>
+                      <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => { setEditingRule(null); setModalOpen('addRule'); }}>+ Thêm Quy tắc</button>
+                    </div>
                     <table aria-label="Danh sách pricing rules">
-                      <thead><tr><th scope="col">Tên rule</th><th scope="col">Điều kiện</th><th scope="col">Hệ số</th><th scope="col">Ưu tiên</th><th scope="col">Trạng thái</th></tr></thead>
+                      <thead><tr><th scope="col">Tên rule</th><th scope="col">Điều kiện</th><th scope="col">Giá trị</th><th scope="col">Ưu tiên</th><th scope="col">Trạng thái</th><th scope="col">Thao tác</th></tr></thead>
                       <tbody>
                         {pricingRules.map(r => (
                           <tr key={r.rule_id}>
-                            <td style={{ fontWeight: 600, color: 'var(--text)' }}>{r.name}</td>
-                            <td><code style={{ fontSize: 11, color: 'var(--accent2)', background: 'rgba(79,135,255,.08)', padding: '2px 6px', borderRadius: 4 }}>{r.condition}</code></td>
-                            <td style={{ color: r.multiplier > 1 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>×{r.multiplier}</td>
+                            <td style={{ fontWeight: 600, color: 'var(--text)' }}>{r.rule_name || r.name}</td>
+                            <td>
+                              <span style={{ fontSize: 11, color: 'var(--text2)' }}>
+                                {r.rule_type === 'occupancy' ? `Occupancy: ${r.threshold_min}% - ${r.threshold_max}%` : r.rule_type}
+                              </span>
+                            </td>
+                            <td style={{ fontWeight: 700, color: r.adjustment_value > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                              {r.adjustment_type === 'percent' ? `${r.adjustment_value > 0 ? '+' : ''}${r.adjustment_value}%` : `₫${fmt(r.adjustment_value)}`}
+                            </td>
                             <td style={{ fontSize: 12 }}>P{r.priority}</td>
-                            <td><span className={`badge ${r.is_active ? 'badge-active' : 'badge-inactive'}`}>{r.is_active ? 'Active' : 'Inactive'}</span></td>
+                            <td>
+                              <span 
+                                className={`badge ${r.is_active ? 'badge-active' : 'badge-inactive'}`}
+                                style={{ cursor: 'pointer' }}
+                                onClick={async () => {
+                                  await pricingApi.toggleRule(r.rule_id);
+                                  const res = await pricingApi.getRules() as any;
+                                  setPricingRules(res.data);
+                                }}
+                              >
+                                {r.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button className="btn btn-ghost" style={{ padding: '4px 8px', marginRight: 5 }} onClick={() => openEditRuleModal(r)}>✏️</button>
+                              <button className="btn btn-ghost" style={{ padding: '4px 8px', color: 'var(--danger)' }} onClick={() => handleDeleteRule(r.rule_id)}>&times;</button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1141,7 +1358,155 @@ ORDER BY hotel_name, revenue_rank;`}</pre>
             </div>
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setModalOpen(null)}>Hủy</button>
-              <button className="btn btn-primary" onClick={() => { showToast('✓ Tạo loại phòng thành công (mock)'); setModalOpen(null); }}>✓ Tạo loại phòng</button>
+              <button className="btn btn-primary" onClick={handleSaveRoom}>
+                {editingRoom ? '✓ Cập nhật' : '✓ Tạo loại phòng'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ADD/EDIT HOTEL ── */}
+      {modalOpen === 'hotel' && (
+        <div className="modal-overlay" onClick={() => setModalOpen(null)} role="dialog" aria-modal="true" aria-labelledby="modal-hotel-title">
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <div className="modal-title" id="modal-hotel-title">🏨 {editingHotel ? 'Sửa chi nhánh' : 'Thêm chi nhánh mới'}</div>
+              <button className="modal-close" onClick={() => setModalOpen(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Tên khách sạn *</label>
+                <input type="text" value={modalHotelName} onChange={e => setModalHotelName(e.target.value)} placeholder="VD: Mường Thanh Grand" />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Thành phố *</label>
+                  <input type="text" value={modalHotelCity} onChange={e => setModalHotelCity(e.target.value)} placeholder="VD: Hà Nội" />
+                </div>
+                <div className="form-group">
+                  <label>Số điện thoại</label>
+                  <input type="text" value={modalHotelPhone} onChange={e => setModalHotelPhone(e.target.value)} placeholder="0901234567" />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Địa chỉ</label>
+                <input type="text" value={modalHotelAddress} onChange={e => setModalHotelAddress(e.target.value)} placeholder="Số nhà, đường, quận, tỉnh..." />
+              </div>
+              <div className="form-group">
+                <label>Email</label>
+                <input type="email" value={modalHotelEmail} onChange={e => setModalHotelEmail(e.target.value)} placeholder="hotel@example.com" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setModalOpen(null)}>Hủy</button>
+              <button className="btn btn-primary" onClick={handleSaveHotel}>
+                {editingHotel ? '✓ Cập nhật' : '✓ Tạo chi nhánh'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ADD PRICING RULE ── */}
+      {modalOpen === 'addRule' && (
+        <div className="modal-overlay" onClick={() => setModalOpen(null)} role="dialog" aria-modal="true" aria-labelledby="modal-rule-title">
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <h2 className="modal-title">{editingRule ? 'Sửa quy tắc' : 'Thêm quy tắc mới'}</h2>
+              <button className="modal-close" onClick={() => { setModalOpen(null); setEditingRule(null); }}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Tên quy tắc</label>
+                <input type="text" value={ruleName} onChange={e => setRuleName(e.target.value)} placeholder="VD: Peak Season June" />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Loại</label>
+                  <select value={ruleType} onChange={e => setRuleType(e.target.value)}>
+                    <option value="occupancy">Occupancy</option>
+                    <option value="season">Season</option>
+                    <option value="demand">Demand</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Ưu tiên</label>
+                  <input type="number" value={isNaN(priority) ? '' : priority} onChange={e => setPriority(parseInt(e.target.value) || 0)} />
+                </div>
+              </div>
+
+              {/* ── HIỆN THEO LOẠI QUY TẮC ── */}
+              {ruleType === 'occupancy' ? (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Occupancy Min (%)</label>
+                    <input type="number" value={isNaN(tMin) ? '' : tMin} onChange={e => setTMin(parseInt(e.target.value) || 0)} />
+                  </div>
+                  <div className="form-group">
+                    <label>Occupancy Max (%)</label>
+                    <input type="number" value={isNaN(tMax) ? '' : tMax} onChange={e => setTMax(parseInt(e.target.value) || 0)} />
+                  </div>
+                </div>
+              ) : (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Từ ngày</label>
+                    <input type="date" value={validFrom} onChange={e => setValidFrom(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label>Đến ngày</label>
+                    <input type="date" value={validTo} onChange={e => setValidTo(e.target.value)} />
+                  </div>
+                </div>
+              )}
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Điều chỉnh</label>
+                  <select value={adjType} onChange={e => setAdjType(e.target.value)}>
+                    <option value="percent">Phần trăm (%)</option>
+                    <option value="fixed">Cố định (₫)</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Giá trị (Âm để giảm giá)</label>
+                  <input type="number" value={isNaN(adjVal) ? '' : adjVal} onChange={e => setAdjVal(parseFloat(e.target.value) || 0)} />
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setModalOpen(null)}>Hủy</button>
+              <button className="btn btn-primary" onClick={async () => {
+                try {
+                  const payload = {
+                    rule_name: ruleName,
+                    rule_type: ruleType,
+                    threshold_min: ruleType === 'occupancy' ? tMin : 0,
+                    threshold_max: ruleType === 'occupancy' ? tMax : 100,
+                    valid_from: ruleType !== 'occupancy' ? validFrom : null,
+                    valid_to: ruleType !== 'occupancy' ? validTo : null,
+                    adjustment_type: adjType,
+                    adjustment_value: adjVal,
+                    priority: priority
+                  };
+
+                  if (editingRule) {
+                    await pricingApi.updateRule(editingRule.rule_id, payload);
+                    showToast('Cập nhật quy tắc thành công', 'success');
+                  } else {
+                    await pricingApi.createRule(payload);
+                    showToast('Thêm quy tắc thành công', 'success');
+                  }
+
+                  setModalOpen(null);
+                  setEditingRule(null);
+                  const res = await pricingApi.getRules() as any;
+                  setPricingRules(res.data);
+                } catch (e: any) {
+                  showToast(e.message || 'Lỗi lưu quy tắc', 'error');
+                }
+              }}>Lưu quy tắc</button>
             </div>
           </div>
         </div>

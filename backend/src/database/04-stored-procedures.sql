@@ -187,5 +187,75 @@ BEGIN
 END
 GO
 
+-- ============================================
+-- STORED PROCEDURE 3: CALCULATE SINGLE SUGGESTION
+-- ============================================
+
+IF OBJECT_ID('sp_calculate_suggested_price', 'P') IS NOT NULL
+    DROP PROCEDURE sp_calculate_suggested_price;
+GO
+
+CREATE PROCEDURE sp_calculate_suggested_price
+    @room_type_id INT,
+    @occupancy_rate DECIMAL(5,2),
+    @is_new_room BIT = 0,
+    @suggested_price DECIMAL(15,2) OUTPUT,
+    @rule_name NVARCHAR(255) OUTPUT -- Trả về tên quy tắc
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @current_price DECIMAL(15,2);
+    DECLARE @rule_id INT;
+    DECLARE @adjustment_type NVARCHAR(50);
+    DECLARE @adjustment_value DECIMAL(10,2);
+    DECLARE @max_price_cap DECIMAL(15,2);
+    DECLARE @min_price_floor DECIMAL(15,2);
+    DECLARE @today DATE = CAST(GETDATE() AS DATE);
+
+    IF @is_new_room = 1
+        SELECT @current_price = base_price FROM room_types WHERE room_type_id = @room_type_id;
+    ELSE
+        SELECT @current_price = current_price FROM room_types WHERE room_type_id = @room_type_id;
+
+    SELECT TOP 1 
+        @rule_id = rule_id,
+        @rule_name = rule_name,
+        @adjustment_type = adjustment_type,
+        @adjustment_value = adjustment_value,
+        @max_price_cap = max_price_cap,
+        @min_price_floor = min_price_floor
+    FROM pricing_rules
+    WHERE is_active = 1
+      AND (
+          (@is_new_room = 1 AND rule_type IN ('season', 'event', 'demand') AND @today BETWEEN ISNULL(valid_from, '1900-01-01') AND ISNULL(valid_to, '2099-12-31'))
+          OR
+          (@is_new_room = 0 AND (
+              (rule_type = 'occupancy' AND @occupancy_rate BETWEEN threshold_min AND threshold_max)
+              OR 
+              (rule_type IN ('season', 'event', 'demand') AND @today BETWEEN ISNULL(valid_from, '1900-01-01') AND ISNULL(valid_to, '2099-12-31'))
+          ))
+      )
+    ORDER BY priority DESC, created_at DESC;
+
+    IF @rule_id IS NULL
+    BEGIN
+        SET @suggested_price = @current_price;
+        SET @rule_name = 'Standard Rate';
+        RETURN;
+    END
+
+    IF UPPER(@adjustment_type) IN ('PERCENT', 'PERCENTAGE')
+        SET @suggested_price = ROUND(@current_price * (1 + @adjustment_value / 100.0), -3);
+    ELSE
+        SET @suggested_price = @current_price + @adjustment_value;
+
+    IF @max_price_cap IS NOT NULL AND @suggested_price > @max_price_cap
+        SET @suggested_price = @max_price_cap;
+    IF @min_price_floor IS NOT NULL AND @suggested_price < @min_price_floor
+        SET @suggested_price = @min_price_floor;
+END
+GO
+
 PRINT '✅ All Stored Procedures created successfully!';
 GO
