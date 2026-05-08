@@ -16,10 +16,25 @@ Hệ thống quản lý đặt phòng khách sạn thông minh với công ngh�
 
 ## 📋 Hướng dẫn cài đặt nhanh (Quick Start)
 
-### 1. Yêu cầu hệ thống
+### 1. Yêu cầu hệ thống & Cấu hình SQL Server
 - **Node.js** v18 trở lên.
 - **Microsoft SQL Server** (Bản Express hoặc Developer).
-- Bật tính năng **SQL Server Authentication** và tạo một User có quyền `dbcreator` hoặc `sysadmin`.
+
+**⚠️ Quan trọng: Cấu hình SQL Server để kết nối được với Node.js:**
+1.  **Mở Port 1433:**
+    *   Mở *SQL Server Configuration Manager*.
+    *   Vào *SQL Server Network Configuration* > *Protocols for MSSQLSERVER*.
+    *   Chuột phải vào **TCP/IP** chọn **Enabled**.
+    *   Chuột phải vào **TCP/IP** > **Properties** > Tab **IP Addresses**. Kéo xuống cuối cùng mục **IPAll**, đặt **TCP Port** là `1433`.
+2.  **Bật SQL Server Authentication:**
+    *   Mở *SQL Server Management Studio (SSMS)*.
+    *   Chuột phải vào Server (trên cùng) > **Properties** > **Security**.
+    *   Chọn **SQL Server and Windows Authentication mode**.
+3.  **Tạo User kết nối:**
+    *   Vào thư mục **Security** > **Logins** > Chuột phải chọn **New Login**.
+    *   Tạo user (VD: `hotel_manager`), chọn mật khẩu và **bỏ tích** "Enforce password policy".
+    *   Mục **Server Roles**: Tích chọn `sysadmin` (để code có quyền tự tạo Database).
+4.  **Restart SQL Server:** Khởi động lại dịch vụ SQL Server trong *Services.msc*.
 
 ### 2. Cài đặt Dependencies
 Mở 2 terminal riêng biệt:
