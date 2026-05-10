@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MongooseModule } from '@nestjs/mongoose';
 
@@ -33,35 +33,41 @@ import { PricingSuggestion } from './database/entities/pricing-suggestion.entity
     // MongoDB Configuration
     MongooseModule.forRoot('mongodb://localhost/hotel-reservation'),
 
-    // Environment Configuration
+    // Environment Configuration (Load biến môi trường TRƯỚC)
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
     }),
 
-    // SQL Database Configuration
-    TypeOrmModule.forRoot({
-      type: 'mssql',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '1433'),
-      username: process.env.DB_USER || 'hotel_manager',
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME || 'hotel_management',
-      entities: [
-        User,
-        Hotel,
-        RoomType,
-        Booking,
-        PriceHistory,
-        PricingRule,
-        PricingSuggestion,
-      ],
-      synchronize: false,
-      logging: false,
-      options: {
-        encrypt: false,
-        trustServerCertificate: true,
-      },
+    // SQL Database Configuration (Chạy BẤT ĐỒNG BỘ để lấy biến môi trường)
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        type: 'mssql',
+        host: configService.get<string>('DB_HOST') || 'localhost',
+        // Tạm thời ẩn port để TypeORM tự dò đúng cổng của Instance
+        // port: parseInt(configService.get<string>('DB_PORT') || '1433', 10),
+        username: configService.get<string>('DB_USER') || 'hotel_manager',
+        password: configService.get<string>('DB_PASSWORD') || 'YourPassword123',
+        database: configService.get<string>('DB_NAME') || 'hotel_management',
+        entities: [
+          User,
+          Hotel,
+          RoomType,
+          Booking,
+          PriceHistory,
+          PricingRule,
+          PricingSuggestion,
+        ],
+        synchronize: false,
+        logging: true, // Bật log để xem chi tiết TypeORM kết nối thế nào
+        options: {
+          encrypt: false, // Tắt mã hóa nghiêm ngặt
+          trustServerCertificate: true, // Né lỗi SSL (chứng chỉ không tin cậy)
+          instanceName: 'MSSQLSERVER01', // Rất quan trọng: Trỏ đúng vào Named Instance của bạn
+        },
+      }),
     }),
 
     // Modules

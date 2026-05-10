@@ -1,67 +1,103 @@
-// backend/src/modules/bookings/bookings.controller.ts
-import { Controller, Get, Query } from '@nestjs/common';
-import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+// ═══════════════════════════════════════════════════════════════
+// bookings.controller.ts — Thành viên 1
+// REST endpoints for booking management (user + admin)
+// ═══════════════════════════════════════════════════════════════
+import {
+  Controller, Get, Post, Patch, Param, Body, Query,
+  UseGuards, ParseIntPipe, HttpCode, HttpStatus,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { BookingsService } from './bookings.service';
+import { CreateBookingDto } from './dto/create-booking.dto';
 
 @Controller('api/bookings')
 export class BookingsController {
-  constructor(@InjectDataSource() private dataSource: DataSource) {}
+  constructor(private readonly bookingsService: BookingsService) {}
 
-  @Get()
-  async getAll(
-    @Query('status') status?: string,
-    @Query('userId') userId?: string,
+  // ── USER: Tạo đặt phòng ────────────────────────────────────
+  // POST /api/bookings
+  // Body: { user_id, room_type_id, check_in_date, check_out_date }
+  // → Calls sp_create_booking (SERIALIZABLE + UPDLOCK/HOLDLOCK)
+  @Post()
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(HttpStatus.CREATED)
+  async create(@Body() dto: CreateBookingDto) {
+    return this.bookingsService.createBooking(dto);
+  }
+
+  // ── USER: Xem lịch sử đặt phòng của mình ──────────────────
+  // GET /api/bookings/my?userId=123
+  @Get('my')
+  @UseGuards(AuthGuard('jwt'))
+  async getMyBookings(@Query('userId', ParseIntPipe) userId: number) {
+    return this.bookingsService.getMyBookings(userId);
+  }
+
+  // ── USER / ADMIN: Kiểm tra tình trạng phòng trống ─────────
+  // GET /api/bookings/availability?roomTypeId=1&checkIn=2026-06-01&checkOut=2026-06-03
+  @Get('availability')
+  async checkAvailability(
+    @Query('roomTypeId', ParseIntPipe) roomTypeId: number,
+    @Query('checkIn') checkIn: string,
+    @Query('checkOut') checkOut: string,
   ) {
-    const conditions: string[] = [];
-    // Whitelist status values to prevent injection
-    const allowedStatuses = ['pending', 'confirmed', 'completed', 'cancelled'];
-    if (status && allowedStatuses.includes(status)) {
-      conditions.push(`b.status = '${status}'`);
-    }
-    if (userId && !isNaN(Number(userId))) {
-      conditions.push(`b.user_id = ${Number(userId)}`);
-    }
-    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    return this.bookingsService.checkAvailability(roomTypeId, checkIn, checkOut);
+  }
 
-    const rows = await this.dataSource.query(`
-      SELECT TOP 50
-        b.booking_id,
-        b.user_id,
-        u.full_name AS user_name,
-        b.room_type_id,
-        rt.name    AS room_type_name,
-        h.name     AS hotel_name,
-        b.check_in_date  AS check_in,
-        b.check_out_date AS check_out,
-        DATEDIFF(day, b.check_in_date, b.check_out_date) AS nights,
-        2                AS guests,
-        b.total_price,
-        b.status,
-        b.created_at
-      FROM bookings b
-      JOIN users u     ON u.user_id      = b.user_id
-      JOIN room_types rt ON rt.room_type_id = b.room_type_id
-      JOIN hotels h    ON h.hotel_id     = rt.hotel_id
-      ${where}
-      ORDER BY b.created_at DESC
-    `);
+  // ── ADMIN: Danh sách tất cả đặt phòng (paginated + filtered) ─
+  // GET /api/bookings?status=pending&page=1&limit=20
+  @Get()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin', 'superadmin')
+  async getAll(
+    @Query('status')      status?: string,
+    @Query('userId')      userId?: string,
+    @Query('roomTypeId')  roomTypeId?: string,
+    @Query('page')        page?: string,
+    @Query('limit')       limit?: string,
+  ) {
+    return this.bookingsService.findAll({
+      status,
+      userId:     userId     ? Number(userId)     : undefined,
+      roomTypeId: roomTypeId ? Number(roomTypeId) : undefined,
+      page:       page       ? Number(page)       : 1,
+      limit:      limit      ? Number(limit)      : 50,
+    });
+  }
 
-    const data = rows.map((b: any) => ({
-      booking_id: String(b.booking_id),
-      user_id: String(b.user_id),
-      user_name: b.user_name,
-      room_type_id: String(b.room_type_id),
-      room_type_name: b.room_type_name,
-      hotel_name: b.hotel_name,
-      check_in: b.check_in,
-      check_out: b.check_out,
-      nights: Number(b.nights),
-      guests: Number(b.guests),
-      total_price: Number(b.total_price),
-      status: b.status,
-      created_at: b.created_at,
-    }));
+  // ── ADMIN: Chi tiết một đặt phòng ─────────────────────────
+  // GET /api/bookings/:id
+  @Get(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin', 'superadmin')
+  async getById(@Param('id', ParseIntPipe) id: number) {
+    return this.bookingsService.findById(id);
+  }
 
-    return { data, total: data.length };
+  // ── ADMIN: Duyệt / hủy / hoàn thành đặt phòng ────────────
+  // PATCH /api/bookings/:id/status
+  // Body: { status: 'confirmed' | 'cancelled' | 'completed', admin_user_id: number }
+  @Patch(':id/status')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin', 'superadmin')
+  async updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { status: string; admin_user_id: number },
+  ) {
+    return this.bookingsService.updateStatus(id, body.status, body.admin_user_id);
+  }
+
+  // ── USER: Hủy đặt phòng của mình ──────────────────────────
+  // PATCH /api/bookings/:id/cancel
+  // Body: { user_id: number }
+  @Patch(':id/cancel')
+  @UseGuards(AuthGuard('jwt'))
+  async cancelBooking(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { user_id: number },
+  ) {
+    return this.bookingsService.cancelBooking(id, body.user_id);
   }
 }

@@ -75,9 +75,12 @@ export default function AuthPage() {
     setLoginErrors({});
     setLoading(true);
     try {
-      await login(loginEmail, loginPwd, rememberMe);
+      const user = await login(loginEmail, loginPwd, rememberMe);
       showToast('success', 'Đăng nhập thành công', 'Đang chuyển hướng...');
-      setTimeout(() => router.push('/admin/dashboard'), 1000);
+      setTimeout(() => {
+        if (user.role === 'customer') router.push('/');
+        else router.push('/admin/dashboard');
+      }, 1000);
     } catch (err: unknown) {
       setLoading(false);
       const apiErr = err as { status?: number; message?: string };
@@ -374,15 +377,7 @@ export default function AuthPage() {
                   {loading ? 'Đang đăng nhập...' : '→ Đăng nhập'}
                 </button>
 
-                <div className="divider">hoặc</div>
-                <div className="social-row">
-                  <button type="button" className="btn-social" onClick={() => alert('Tính năng đang phát triển')}>
-                    🔵 Google
-                  </button>
-                  <button type="button" className="btn-social" onClick={() => alert('Tính năng đang phát triển')}>
-                    🔷 Facebook
-                  </button>
-                </div>
+
               </form>
             )}
 

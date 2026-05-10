@@ -1,0 +1,207 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { searchApi, bookingsApi } from '@/lib/api';
+import Link from 'next/link';
+import { Suspense } from 'react';
+import { useAuth } from '@/lib/auth';
+
+function SearchResultsContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { user, isAuthenticated } = useAuth();
+
+  const city = searchParams.get('city') || '';
+  const checkIn = searchParams.get('checkIn') || '';
+  const checkOut = searchParams.get('checkOut') || '';
+  const guests = parseInt(searchParams.get('guests') || '1');
+
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [bookingModal, setBookingModal] = useState<any>(null);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
+
+  useEffect(() => {
+    const fetchRooms = async () => {
+      setLoading(true);
+      const start = Date.now();
+      try {
+        const res: any = await searchApi.searchRooms({ city, checkIn, checkOut, guests });
+        setRooms(res.data);
+        
+        // Log the search (Thành viên 2)
+        const sid = 'guest_session_' + Math.random().toString(36).substring(7);
+        setSessionId(sid);
+        searchApi.logSearch({
+          city: city || 'Unknown',
+          check_in: checkIn || new Date().toISOString(),
+          check_out: checkOut || new Date(Date.now() + 86400000).toISOString(),
+          guests,
+          results_count: res.data.length,
+          session_id: sid,
+          response_time_ms: Date.now() - start
+        });
+
+      } catch (err) {
+        console.error('Search failed', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRooms();
+  }, [city, checkIn, checkOut, guests]);
+
+  const handleBook = async () => {
+    if (!bookingModal) return;
+    if (!isAuthenticated || !user) {
+      alert('Vui lòng đăng nhập để tiếp tục.');
+      router.push('/auth');
+      return;
+    }
+    setBookingLoading(true);
+    try {
+      const availRes = await bookingsApi.checkAvailability(bookingModal.room_type_id, checkIn, checkOut);
+      if (!(availRes as any).available) {
+        alert('Phòng đã hết chỗ trong khoảng thời gian này.');
+        return;
+      }
+
+      const res = await bookingsApi.create({
+        user_id: Number(user.user_id),
+        room_type_id: bookingModal.room_type_id,
+        check_in_date: checkIn,
+        check_out_date: checkOut,
+      });
+      alert('Booking successful! Transaction committed.');
+      
+      // Mark as converted
+      if (sessionId) {
+        await searchApi.markConverted(sessionId, String(bookingModal.room_type_id));
+      }
+
+      setBookingModal(null);
+    } catch (err: any) {
+      alert(err.message || 'Double Booking detected! Transaction rolled back.');
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0a0d13] text-white">
+      {/* Mini Nav */}
+      <nav className="flex items-center justify-between px-10 py-6 border-b border-white/10 bg-[#0a0d13]/80 backdrop-blur-md sticky top-0 z-50">
+        <Link href="/" className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#d4af37] to-[#aa7c11] flex items-center justify-center font-bold text-sm text-white">
+            L
+          </div>
+          <span className="text-xl font-bold tracking-widest uppercase">LuxeStay</span>
+        </Link>
+        <div className="flex gap-4 text-sm font-medium items-center">
+          <div className="glass px-4 py-2 rounded-full text-white/80">
+            {city || 'Anywhere'} • {checkIn} to {checkOut} • {guests} Guest{guests > 1 ? 's' : ''}
+          </div>
+          {isAuthenticated ? (
+            <Link href="/profile" className="hover:text-[#d4af37] transition-colors ml-4">My Profile</Link>
+          ) : (
+            <Link href="/auth" className="hover:text-[#d4af37] transition-colors ml-4">Sign In</Link>
+          )}
+        </div>
+      </nav>
+
+      <main className="max-w-6xl mx-auto px-6 py-12">
+        <h1 className="text-3xl font-light mb-8">
+          Found <span className="font-bold text-[#d4af37]">{rooms.length}</span> luxury stays
+        </h1>
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1,2,3,4,5,6].map(i => (
+              <div key={i} className="glass-panel h-80 rounded-2xl animate-pulse bg-white/5" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {rooms.map((room, i) => (
+              <div key={room.room_type_id} className="glass-panel rounded-2xl overflow-hidden flex flex-col hover:-translate-y-1 transition-all duration-300 animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s` }}>
+                <div className="h-48 bg-gray-800 relative">
+                  {/* We simulate an image since MongoDB stores image arrays */}
+                  <img src={room.images?.[0] || `https://picsum.photos/seed/${room.room_type_id}/600/400`} className="w-full h-full object-cover opacity-80" alt={room.name} />
+                  <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold text-[#d4af37]">
+                    ₫{room.base_price?.toLocaleString()} / night
+                  </div>
+                </div>
+                <div className="p-5 flex flex-col flex-1">
+                  <h3 className="text-lg font-bold mb-1">{room.name}</h3>
+                  <p className="text-xs text-white/50 mb-4">{room.hotel_name || 'LuxeStay Central'}</p>
+                  
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {room.amenities?.slice(0, 3).map((a: string) => (
+                      <span key={a} className="text-[10px] uppercase tracking-wider bg-white/10 px-2 py-1 rounded border border-white/10">
+                        {a}
+                      </span>
+                    ))}
+                    {room.amenities?.length > 3 && <span className="text-[10px] text-white/50 py-1">+{room.amenities.length - 3} more</span>}
+                  </div>
+
+                  <div className="mt-auto">
+                    <button 
+                      onClick={() => setBookingModal(room)}
+                      className="w-full btn-luxury py-3 rounded-xl text-sm font-semibold tracking-wider uppercase"
+                    >
+                      Book Now
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Booking Modal */}
+      {bookingModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="glass-panel p-8 rounded-2xl w-full max-w-md animate-fade-in-up">
+            <h2 className="text-2xl font-bold mb-2 text-[#d4af37]">Confirm Booking</h2>
+            <p className="text-sm text-white/70 mb-6">You are about to book {bookingModal.name} at {bookingModal.hotel_name || 'LuxeStay'}.</p>
+            
+            <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10 text-sm">
+              <div className="flex justify-between mb-2">
+                <span className="text-white/50">Check-in</span>
+                <span>{checkIn}</span>
+              </div>
+              <div className="flex justify-between mb-2">
+                <span className="text-white/50">Check-out</span>
+                <span>{checkOut}</span>
+              </div>
+              <div className="flex justify-between font-bold text-[#d4af37] pt-2 border-t border-white/10">
+                <span>Price per night</span>
+                <span>₫{bookingModal.base_price?.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <button onClick={() => setBookingModal(null)} className="flex-1 py-3 rounded-xl border border-white/20 hover:bg-white/10 transition">
+                Cancel
+              </button>
+              <button onClick={handleBook} disabled={bookingLoading} className="flex-1 btn-luxury py-3 rounded-xl font-semibold">
+                {bookingLoading ? 'Processing...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function SearchResultsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0a0d13] flex items-center justify-center text-[#d4af37]">Loading...</div>}>
+      <SearchResultsContent />
+    </Suspense>
+  );
+}

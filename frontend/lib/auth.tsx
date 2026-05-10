@@ -15,7 +15,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string, remember?: boolean) => Promise<void>;
+  login: (email: string, password: string, remember?: boolean) => Promise<AuthUser>;
   register: (fullName: string, email: string, password: string, phone?: string) => Promise<unknown>;
   logout: () => void;
 }
@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     tokenStore.set(data.access_token, remember);
     tokenStore.setUser(data.user, remember);
     setUser(data.user);
+    return data.user;
   }, []);
 
   const register = useCallback(

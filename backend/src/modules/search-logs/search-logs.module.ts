@@ -1,3 +1,4 @@
+// backend/src/modules/search-logs/search-logs.module.ts (updated — Thành viên 2)
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SearchLogsService } from './search-logs.service';

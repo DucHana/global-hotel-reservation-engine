@@ -3,19 +3,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { analyticsApi, usersApi, roomsApi, pricingApi, hotelsApi, bookingsApi, checkApiHealth } from '@/lib/api';
+import { analyticsApi, usersApi, roomsApi, pricingApi, hotelsApi, bookingsApi, searchApi, supportApi, checkApiHealth } from '@/lib/api';
 import type {
   MockUser, MockHotel, MockRoomType, MockBooking, MockPriceHistory, MockAnalytics, MockPricingRule
 } from '@/types';
 
 // ── Types for API responses ──
-type PageId = 'dashboard' | 'auth' | 'users' | 'rooms' | 'hotels' | 'pricing' | 'history' | 'rules' | 'reports' | 'occupancy';
+type PageId = 'dashboard' | 'auth' | 'users' | 'rooms' | 'hotels' | 'pricing' | 'history' | 'rules' | 'reports' | 'occupancy' | 'bookings' | 'search-analytics' | 'support';
 
 const PAGE_TITLES: Record<PageId, string> = {
   dashboard: 'Dashboard', auth: 'Auth & RBAC', users: 'Người dùng',
   rooms: 'Loại phòng', hotels: 'Chi nhánh', pricing: 'Dynamic Pricing',
   history: 'Price History', rules: 'Pricing Rules', reports: 'Báo cáo OLAP',
   occupancy: 'Occupancy Rate',
+  bookings: 'Quản lý Đặt phòng',
+  'search-analytics': 'Search Analytics (NoSQL)',
+  support: 'Yêu cầu Hỗ trợ',
 };
 
 // ── Utility ──
@@ -33,7 +36,6 @@ export default function AdminDashboard() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
-  // Data states
   const [analytics, setAnalytics] = useState<MockAnalytics | null>(null);
   const [users, setUsers] = useState<MockUser[]>([]);
   const [rooms, setRooms] = useState<MockRoomType[]>([]);
@@ -41,6 +43,14 @@ export default function AdminDashboard() {
   const [bookings, setBookings] = useState<MockBooking[]>([]);
   const [priceHistory, setPriceHistory] = useState<MockPriceHistory[]>([]);
   const [pricingRules, setPricingRules] = useState<MockPricingRule[]>([]);
+  // Member 1 — Bookings management state
+  const [allBookings, setAllBookings] = useState<MockBooking[]>([]);
+  const [bookingFilter, setBookingFilter] = useState('');
+  const [bookingStatusAction, setBookingStatusAction] = useState<{id:string;status:string}|null>(null);
+  // Member 2 — Search analytics + support state
+  const [searchAnalytics, setSearchAnalytics] = useState<{topCities:any[];amenities:any[];trend:any[]}>({topCities:[],amenities:[],trend:[]});
+  const [supportTickets, setSupportTickets] = useState<any[]>([]);
+  const [supportFilter, setSupportFilter] = useState('');
 
   // Pricing form
   const [selRoom, setSelRoom] = useState('rt001');
@@ -111,6 +121,19 @@ export default function AdminDashboard() {
           ]);
           setAnalytics(analyticsData);
           setBookings(bookingData.data);
+        } else if (page === 'bookings') {
+          const res = await bookingsApi.getAll() as { data: MockBooking[] };
+          setAllBookings(res.data);
+        } else if (page === 'search-analytics') {
+          const [cities, amenities, trend] = await Promise.all([
+            searchApi.getAnalytics('top-cities', 30) as Promise<{data:any[]}>,
+            searchApi.getAnalytics('popular-amenities', 30) as Promise<{data:any[]}>,
+            searchApi.getAnalytics('trend', 14) as Promise<{data:any[]}>,
+          ]);
+          setSearchAnalytics({ topCities: cities.data, amenities: amenities.data, trend: trend.data });
+        } else if (page === 'support') {
+          const res = await supportApi.getAll() as { data: any[] };
+          setSupportTickets(res.data);
         }
       } catch (err) {
         showToast('Lỗi tải dữ liệu', 'error');
@@ -452,6 +475,25 @@ export default function AdminDashboard() {
                 <span className="nav-icon">{icon}</span>{label}
               </button>
             ))}
+
+            <div className="nav-label" style={{ marginTop: 8 }}>TV1 — Giao dịch</div>
+            {([
+              ['bookings','📝','Quản lý Đặt phòng'],
+            ] as [PageId, string, string][]).map(([id, icon, label]) => (
+              <button key={id} className={`nav-item${page === id ? ' active' : ''}`} onClick={() => setPage(id)}>
+                <span className="nav-icon">{icon}</span>{label}
+              </button>
+            ))}
+
+            <div className="nav-label" style={{ marginTop: 8 }}>TV2 — NoSQL & Search</div>
+            {([
+              ['search-analytics','🔍','Search Analytics'],
+              ['support','📨','Yêu cầu Hỗ trợ'],
+            ] as [PageId, string, string][]).map(([id, icon, label]) => (
+              <button key={id} className={`nav-item${page === id ? ' active' : ''}`} onClick={() => setPage(id)}>
+                <span className="nav-icon">{icon}</span>{label}
+              </button>
+            ))}
           </nav>
 
           <div className="sidebar-footer">
@@ -668,7 +710,7 @@ WITH (STATE = ON);`}</pre>
                         <span style={{ fontSize: 12, color: 'var(--text3)' }}>{users.length} người dùng</span>
                       </div>
                       <table aria-label="Danh sách người dùng">
-                        <thead><tr><th scope="col">Người dùng</th><th scope="col">Email</th><th scope="col">SĐT</th><th scope="col">Vai trò</th><th scope="col">Trạng thái</th><th scope="col">Ngày tạo</th></tr></thead>
+                        <thead><tr><th scope="col">Người dùng</th><th scope="col">Email</th><th scope="col">SĐT</th><th scope="col">Vai trò</th><th scope="col">Trạng thái</th><th scope="col">Ngày tạo</th><th scope="col">Hành động</th></tr></thead>
                         <tbody>
                           {users.map(u => (
                             <tr key={u.user_id}>
@@ -678,6 +720,31 @@ WITH (STATE = ON);`}</pre>
                               <td><span className={`badge ${u.role === 'admin' ? 'badge-admin' : ''}`}>{u.role}</span></td>
                               <td><span className={`badge ${u.is_active ? 'badge-active' : 'badge-inactive'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td>
                               <td style={{ fontSize: 12 }}>{new Date(u.created_at).toLocaleDateString('vi-VN')}</td>
+                              <td>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={async () => {
+                                    const newRole = window.prompt('Nhập role mới (customer/staff/manager/admin):', u.role);
+                                    if (newRole) {
+                                      try {
+                                        await usersApi.update(u.user_id, { role: newRole });
+                                        showToast('Cập nhật role thành công');
+                                        const res = await usersApi.getAll() as { data: MockUser[] };
+                                        setUsers(res.data);
+                                      } catch { showToast('Lỗi', 'error'); }
+                                    }
+                                  }}>Sửa</button>
+                                  <button className="btn btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={async () => {
+                                    if (confirm('Xóa user này?')) {
+                                      try {
+                                        await usersApi.delete(u.user_id);
+                                        showToast('Đã xóa user');
+                                        const res = await usersApi.getAll() as { data: MockUser[] };
+                                        setUsers(res.data);
+                                      } catch { showToast('Lỗi xóa', 'error'); }
+                                    }
+                                  }}>Xóa</button>
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -699,7 +766,7 @@ WITH (STATE = ON);`}</pre>
                         <span style={{ fontSize: 12, color: 'var(--text3)' }}>{rooms.length} loại phòng</span>
                       </div>
                       <table aria-label="Danh sách loại phòng">
-                        <thead><tr><th scope="col">Tên phòng</th><th scope="col">Khách sạn</th><th scope="col">Sức chứa</th><th scope="col">Giá hiện tại</th><th scope="col">Trống/Tổng</th><th scope="col">Trạng thái</th></tr></thead>
+                        <thead><tr><th scope="col">Tên phòng</th><th scope="col">Khách sạn</th><th scope="col">Sức chứa</th><th scope="col">Giá hiện tại</th><th scope="col">Trống/Tổng</th><th scope="col">Trạng thái</th><th scope="col">Hành động</th></tr></thead>
                         <tbody>
                           {rooms.map(r => (
                             <tr key={r.room_type_id}>
@@ -709,6 +776,40 @@ WITH (STATE = ON);`}</pre>
                               <td style={{ color: 'var(--gold)', fontWeight: 600 }}>₫{fmt(r.base_price)}</td>
                               <td>{r.available_rooms}/{r.total_rooms}</td>
                               <td><span className="badge badge-active">Active</span></td>
+                              <td>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={async () => {
+                                    const newPrice = window.prompt('Nhập giá mới:', r.base_price?.toString());
+                                    if (newPrice) {
+                                      try {
+                                        await roomsApi.update(r.room_type_id, { base_price: Number(newPrice) });
+                                        showToast('Cập nhật giá thành công');
+                                        const res = await roomsApi.getAll() as { data: MockRoomType[] };
+                                        setRooms(res.data);
+                                      } catch { showToast('Lỗi', 'error'); }
+                                    }
+                                  }}>Sửa giá</button>
+                                  <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={async () => {
+                                    const desc = window.prompt('Nhập mô tả catalog (MongoDB):');
+                                    if (desc) {
+                                      try {
+                                        await roomsApi.updateCatalog(r.room_type_id, { description: { vi: desc } });
+                                        showToast('Cập nhật Catalog thành công');
+                                      } catch { showToast('Lỗi', 'error'); }
+                                    }
+                                  }}>Catalog</button>
+                                  <button className="btn btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={async () => {
+                                    if (confirm('Xóa phòng này?')) {
+                                      try {
+                                        await roomsApi.delete(r.room_type_id);
+                                        showToast('Đã xóa phòng');
+                                        const res = await roomsApi.getAll() as { data: MockRoomType[] };
+                                        setRooms(res.data);
+                                      } catch { showToast('Lỗi xóa', 'error'); }
+                                    }
+                                  }}>Xóa</button>
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -864,7 +965,7 @@ WITH (STATE = ON);`}</pre>
                   <div className="card">
                     <div className="card-header"><span className="card-title">⚙️ Pricing Rules</span></div>
                     <table aria-label="Danh sách pricing rules">
-                      <thead><tr><th scope="col">Tên rule</th><th scope="col">Điều kiện</th><th scope="col">Hệ số</th><th scope="col">Ưu tiên</th><th scope="col">Trạng thái</th></tr></thead>
+                      <thead><tr><th scope="col">Tên rule</th><th scope="col">Điều kiện</th><th scope="col">Hệ số</th><th scope="col">Ưu tiên</th><th scope="col">Trạng thái</th><th scope="col">Hành động</th></tr></thead>
                       <tbody>
                         {pricingRules.map(r => (
                           <tr key={r.rule_id}>
@@ -873,6 +974,28 @@ WITH (STATE = ON);`}</pre>
                             <td style={{ color: r.multiplier > 1 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>×{r.multiplier}</td>
                             <td style={{ fontSize: 12 }}>P{r.priority}</td>
                             <td><span className={`badge ${r.is_active ? 'badge-active' : 'badge-inactive'}`}>{r.is_active ? 'Active' : 'Inactive'}</span></td>
+                            <td>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={async () => {
+                                    try {
+                                      await pricingApi.toggleRule(r.rule_id);
+                                      showToast(`Đã ${r.is_active ? 'tắt' : 'bật'} rule`);
+                                      const res = await pricingApi.getRules() as { data: MockPricingRule[] };
+                                      setPricingRules(res.data);
+                                    } catch { showToast('Lỗi', 'error'); }
+                                  }}>{r.is_active ? 'Tắt' : 'Bật'}</button>
+                                  <button className="btn btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={async () => {
+                                    if (confirm('Xóa rule này?')) {
+                                      try {
+                                        await pricingApi.deleteRule(r.rule_id);
+                                        showToast('Đã xóa rule');
+                                        const res = await pricingApi.getRules() as { data: MockPricingRule[] };
+                                        setPricingRules(res.data);
+                                      } catch { showToast('Lỗi xóa', 'error'); }
+                                    }
+                                  }}>Xóa</button>
+                                </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -945,6 +1068,278 @@ WHERE b.status = 'confirmed'
 GROUP BY h.hotel_id, h.name, rt.room_type_id, rt.name
 ORDER BY hotel_name, revenue_rank;`}</pre>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── BOOKINGS (Thành viên 1: Transaction & Locking) ─── */}
+                {page === 'bookings' && (
+                  <div>
+                    <div className="card" style={{ marginBottom: 20 }}>
+                      <div className="card-header">
+                        <span className="card-title">🔒 Pessimistic Locking — sp_create_booking</span>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>SERIALIZABLE + UPDLOCK/HOLDLOCK</span>
+                      </div>
+                      <div className="card-body">
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                          {[
+                            { label: 'SET ISOLATION LEVEL', val: 'SERIALIZABLE', color: 'var(--accent2)' },
+                            { label: 'SELECT...WITH', val: '(UPDLOCK, HOLDLOCK)', color: 'var(--gold)' },
+                            { label: 'Double Booking Check', val: 'Overlap Query', color: 'var(--success)' },
+                            { label: 'On Conflict', val: 'ROLLBACK + RAISERROR', color: 'var(--danger)' },
+                          ].map(b => (
+                            <div key={b.label} style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px' }}>
+                              <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase' as const, letterSpacing: 1 }}>{b.label}</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: b.color, fontFamily: 'monospace', marginTop: 3 }}>{b.val}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' as const }}>
+                      {['', 'pending', 'confirmed', 'completed', 'cancelled'].map(s => (
+                        <button key={s} className={`btn ${bookingFilter === s ? 'btn-primary' : 'btn-ghost'}`}
+                          onClick={() => setBookingFilter(s)} style={{ padding: '6px 14px', fontSize: 12 }}>
+                          {s === '' ? 'Tất cả' : s}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="card">
+                      <div className="card-header">
+                        <span className="card-title">📝 Danh sách đặt phòng</span>
+                        <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+                          {(bookingFilter ? allBookings.filter(b => b.status === bookingFilter) : allBookings).length} kết quả
+                        </span>
+                      </div>
+                      <table>
+                        <thead><tr>
+                          <th>Khách</th><th>Phòng</th><th>Khách sạn</th>
+                          <th>Check-in</th><th>Check-out</th><th>Đêm</th>
+                          <th>Tổng tiền</th><th>Trạng thái</th><th>Hành động</th>
+                        </tr></thead>
+                        <tbody>
+                          {(bookingFilter ? allBookings.filter(b => b.status === bookingFilter) : allBookings).map(b => (
+                            <tr key={b.booking_id}>
+                              <td style={{ fontWeight: 600, color: 'var(--text)' }}>{b.user_name}</td>
+                              <td style={{ fontSize: 12 }}>{b.room_type_name}</td>
+                              <td style={{ fontSize: 11, color: 'var(--text3)' }}>{b.hotel_name}</td>
+                              <td style={{ fontSize: 12 }}>{new Date(b.check_in).toLocaleDateString('vi-VN')}</td>
+                              <td style={{ fontSize: 12 }}>{new Date(b.check_out).toLocaleDateString('vi-VN')}</td>
+                              <td style={{ textAlign: 'center' as const }}>{b.nights}</td>
+                              <td style={{ color: 'var(--gold)', fontWeight: 600 }}>₫{fmt(b.total_price)}</td>
+                              <td><span className={`badge badge-${b.status}`}>{b.status}</span></td>
+                              <td>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  {b.status === 'pending' && (
+                                    <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }}
+                                      onClick={async () => {
+                                        try {
+                                          await bookingsApi.updateStatus(b.booking_id, 'confirmed', '1');
+                                          showToast('✅ Đã xác nhận đặt phòng');
+                                          const res = await bookingsApi.getAll() as { data: MockBooking[] };
+                                          setAllBookings(res.data);
+                                        } catch { showToast('Lỗi xác nhận', 'error'); }
+                                      }}>✓ Duyệt</button>
+                                  )}
+                                  {b.status === 'confirmed' && (
+                                    <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }}
+                                      onClick={async () => {
+                                        try {
+                                          await bookingsApi.updateStatus(b.booking_id, 'completed', '1');
+                                          showToast('✅ Hoàn thành');
+                                          const res = await bookingsApi.getAll() as { data: MockBooking[] };
+                                          setAllBookings(res.data);
+                                        } catch { showToast('Lỗi', 'error'); }
+                                      }}>✓ Hoàn thành</button>
+                                  )}
+                                  {['pending','confirmed'].includes(b.status) && (
+                                    <button className="btn btn-danger" style={{ padding: '3px 8px', fontSize: 11 }}
+                                      onClick={async () => {
+                                        try {
+                                          await bookingsApi.updateStatus(b.booking_id, 'cancelled', '1');
+                                          showToast('Đã hủy đặt phòng', 'warning');
+                                          const res = await bookingsApi.getAll() as { data: MockBooking[] };
+                                          setAllBookings(res.data);
+                                        } catch { showToast('Lỗi hủy', 'error'); }
+                                      }}>✕ Hủy</button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── SEARCH ANALYTICS (Thành viên 2: NoSQL + MongoDB Aggregation) ─── */}
+                {page === 'search-analytics' && (
+                  <div>
+                    <div className="card" style={{ marginBottom: 20 }}>
+                      <div className="card-header">
+                        <span className="card-title">🍃 MongoDB — Polyglot Persistence</span>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>Aggregation Pipeline</span>
+                      </div>
+                      <div className="card-body">
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                          {[
+                            { label: 'Collection', val: 'customer_search_logs', color: 'var(--success)' },
+                            { label: 'Index 1', val: '{ city: 1, createdAt: -1 }', color: 'var(--accent2)' },
+                            { label: 'Index 2', val: '{ city: 1, converted: 1 }', color: 'var(--gold)' },
+                            { label: 'Full-text', val: '{ city: "text" }', color: 'var(--accent2)' },
+                          ].map(b => (
+                            <div key={b.label} style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px' }}>
+                              <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase' as const, letterSpacing: 1 }}>{b.label}</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: b.color, fontFamily: 'monospace', marginTop: 3 }}>{b.val}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid-cols-2" style={{ marginBottom: 20 }}>
+                      <div className="card">
+                        <div className="card-header"><span className="card-title">🏙️ Top Thành phố tìm kiếm</span></div>
+                        <div className="card-body" style={{ padding: 0 }}>
+                          <table>
+                            <thead><tr><th>Thành phố</th><th>Tìm kiếm</th><th>Chuyển đổi</th><th>Tỷ lệ</th></tr></thead>
+                            <tbody>
+                              {searchAnalytics.topCities.map((c: any, i) => (
+                                <tr key={c.city}>
+                                  <td>
+                                    <span style={{ background: 'rgba(240,165,0,.15)', color: 'var(--gold)', padding: '1px 7px', borderRadius: 20, fontSize: 11, fontWeight: 700, marginRight: 6 }}>#{i+1}</span>
+                                    {c.city}
+                                  </td>
+                                  <td style={{ fontWeight: 600, color: 'var(--text)' }}>{c.search_count?.toLocaleString()}</td>
+                                  <td style={{ color: 'var(--success)' }}>{c.converted_count}</td>
+                                  <td><span style={{ color: c.conversion_rate > 20 ? 'var(--success)' : 'var(--gold)', fontWeight: 600 }}>{c.conversion_rate}%</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="card">
+                        <div className="card-header"><span className="card-title">🏷️ Tiện nghi phổ biến</span></div>
+                        <div className="card-body">
+                          {searchAnalytics.amenities.map((a: any) => {
+                            const max = Math.max(...searchAnalytics.amenities.map((x: any) => x.count));
+                            return (
+                              <div key={a.amenity} style={{ marginBottom: 10 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                                  <span style={{ color: 'var(--text2)' }}>{a.amenity}</span>
+                                  <span style={{ color: 'var(--gold)', fontWeight: 600 }}>{a.count?.toLocaleString()}</span>
+                                </div>
+                                <div style={{ background: 'var(--bg3)', borderRadius: 4, height: 5 }}>
+                                  <div style={{ height: '100%', width: `${(a.count / max) * 100}%`, background: 'linear-gradient(90deg, var(--accent), var(--accent2))', borderRadius: 4 }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="card">
+                      <div className="card-header"><span className="card-title">📈 Xu hướng tìm kiếm (14 ngày)</span></div>
+                      <div className="card-body">
+                        <div className="chart-wrap">
+                          {searchAnalytics.trend.map((d: any, i) => {
+                            const maxS = Math.max(...searchAnalytics.trend.map((x: any) => x.searches));
+                            return (
+                              <div key={i} className="bar-group">
+                                <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 'calc(100% - 24px)', flex: 1, width: '100%' }}>
+                                  <div className="bar bar-gold" style={{ height: `${(d.searches / maxS) * 100}%`, minHeight: 4, width: '60%' }} title={`${d.date}: ${d.searches} tìm kiếm`} />
+                                  <div className="bar bar-blue" style={{ height: `${(d.conversions / maxS) * 100}%`, minHeight: 2, width: '30%' }} title={`${d.date}: ${d.conversions} chuyển đổi`} />
+                                </div>
+                                <div className="bar-label">{d.date?.slice(5)}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--gold)', display: 'inline-block' }} />Tìm kiếm</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--accent)', display: 'inline-block' }} />Chuyển đổi</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── SUPPORT (Thành viên 2: MongoDB Support Tickets) ─── */}
+                {page === 'support' && (
+                  <div>
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' as const }}>
+                      {['', 'open', 'in_progress', 'resolved'].map(s => (
+                        <button key={s} className={`btn ${supportFilter === s ? 'btn-primary' : 'btn-ghost'}`}
+                          onClick={() => setSupportFilter(s)} style={{ padding: '6px 14px', fontSize: 12 }}>
+                          {s === '' ? 'Tất cả' : s === 'in_progress' ? 'Đang xử lý' : s === 'open' ? 'Mới' : 'Đã giải quyết'}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="card">
+                      <div className="card-header">
+                        <span className="card-title">📨 Tickets hỗ trợ (MongoDB)</span>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                          {(supportFilter ? supportTickets.filter((t: any) => t.status === supportFilter) : supportTickets).length} tickets
+                        </span>
+                      </div>
+                      <table>
+                        <thead><tr><th>Khách hàng</th><th>Chủ đề</th><th>Danh mục</th><th>Ưu tiên</th><th>Trạng thái</th><th>Thời gian</th><th>Hành động</th></tr></thead>
+                        <tbody>
+                          {(supportFilter ? supportTickets.filter((t: any) => t.status === supportFilter) : supportTickets).map((t: any) => (
+                            <tr key={t._id}>
+                              <td style={{ fontWeight: 600, color: 'var(--text)' }}>{t.user_name}</td>
+                              <td style={{ fontSize: 12 }}>{t.subject}</td>
+                              <td><span className="badge" style={{ background: 'rgba(79,135,255,.1)', color: 'var(--accent2)', border: '1px solid rgba(79,135,255,.3)' }}>{t.category}</span></td>
+                              <td>
+                                <span style={{ color: t.priority === 'high' || t.priority === 'urgent' ? 'var(--danger)' : t.priority === 'medium' ? 'var(--gold)' : 'var(--text3)', fontWeight: 600, fontSize: 12 }}>
+                                  {t.priority === 'urgent' ? '🔴' : t.priority === 'high' ? '🟠' : t.priority === 'medium' ? '🟡' : '🟢'} {t.priority}
+                                </span>
+                              </td>
+                              <td>
+                                <span className={`badge ${t.status === 'open' ? 'badge-pending' : t.status === 'resolved' ? 'badge-active' : ''}`}>
+                                  {t.status}
+                                </span>
+                              </td>
+                              <td style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date(t.createdAt).toLocaleString('vi-VN')}</td>
+                              <td>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  {t.status !== 'resolved' && (
+                                    <>
+                                      <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }}
+                                        onClick={async () => {
+                                          const replyMsg = window.prompt('Nhập nội dung trả lời:');
+                                          if (replyMsg) {
+                                            try {
+                                              await supportApi.reply(t._id, String(user?.user_id || '1'), user?.full_name || 'Admin', replyMsg);
+                                              showToast('Đã gửi phản hồi');
+                                              const res = await supportApi.getAll() as { data: any[] };
+                                              setSupportTickets(res.data);
+                                            } catch { showToast('Lỗi gửi phản hồi', 'error'); }
+                                          }
+                                        }}>Trả lời</button>
+                                      <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }}
+                                        onClick={async () => {
+                                          try {
+                                            await supportApi.resolve(t._id, '1');
+                                            showToast('✅ Ticket đã giải quyết');
+                                            const res = await supportApi.getAll() as { data: any[] };
+                                            setSupportTickets(res.data);
+                                          } catch { showToast('Lỗi', 'error'); }
+                                        }}>✓ Giải quyết</button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
