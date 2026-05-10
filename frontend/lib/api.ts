@@ -627,9 +627,17 @@ export const pricingApi = {
     }
   },
 
-  createRule: async (payload: {
-    name: string; condition: string; multiplier: number; priority: number;
-    hotel_id?: number; is_active?: boolean;
+ createRule: async (payload: {
+    rule_name: string;
+    rule_type: string;
+    threshold_min: number;
+    threshold_max: number;
+    adjustment_type: string;
+    adjustment_value: number;
+    priority: number;
+    is_active?: boolean;
+    valid_from?: string | null;
+    valid_to?: string | null;
   }) => {
     if (USE_MOCK) {
       await delay(600);
@@ -638,9 +646,18 @@ export const pricingApi = {
     return http('/api/pricing/rules', { method: 'POST', body: JSON.stringify(payload) });
   },
 
-  updateRule: async (ruleId: string | number, payload: {
-    name?: string; condition?: string; multiplier?: number; priority?: number; is_active?: boolean;
-  }) => {
+  updateRule: async (ruleId: string | number, payload: Partial<{
+    rule_name: string;
+    rule_type: string;
+    threshold_min: number;
+    threshold_max: number;
+    adjustment_type: string;
+    adjustment_value: number;
+    priority: number;
+    is_active: boolean;
+    valid_from: string | null;
+    valid_to: string | null;
+  }>) => {
     if (USE_MOCK) {
       await delay(500);
       const r = MOCK_PRICING_RULES.find((r: any) => String(r.rule_id) === String(ruleId));

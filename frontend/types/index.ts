@@ -13,7 +13,7 @@ export interface MockUser {
 }
 
 export interface MockHotel {
-  hotel_id: string;
+  hotel_id: string | number;
   name: string;
   address: string;
   city: string;
@@ -26,14 +26,15 @@ export interface MockHotel {
 }
 
 export interface MockRoomType {
-  room_type_id: string;
-  hotel_id: string;
+  room_type_id: string | number;
+  hotel_id: string | number;
   hotel_name: string;
   name: string;
   capacity: number;
   base_price: number;
-  cap_price: number;
-  floor_price: number;
+  current_price?: number; // Đã thêm để hết lỗi r.current_price
+  cap_price?: number;
+  floor_price?: number;
   total_rooms: number;
   available_rooms: number;
   description: string;
@@ -53,19 +54,24 @@ export interface MockBooking {
   nights: number;
   guests: number;
   total_price: number;
-  status: 'confirmed' | 'pending' | 'cancelled' | 'checked_in' | 'checked_out';
+  // Đã thêm 'completed' cho khớp với thao tác Admin duyệt
+  status: 'confirmed' | 'pending' | 'cancelled' | 'checked_in' | 'checked_out' | 'completed';
   created_at: string;
 }
 
 export interface MockPriceHistory {
-  id: string;
+  id?: string;
+  price_history_id?: string | number; // Đã thêm
   room_type_id: string;
   room_type_name: string;
+  hotel_name?: string; // Đã thêm
   old_price: number;
   new_price: number;
   change_pct: number;
-  reason: string;
+  reason?: string;
+  note?: string; // Đã thêm để hiển thị ghi chú
   changed_by: string;
+  changed_by_name?: string; // Đã thêm
   alert_flag: boolean;
   changed_at: string;
 }
@@ -92,11 +98,20 @@ export interface MockAnalytics {
   }>;
 }
 
+// Đã cập nhật lại toàn bộ cho khớp với Form Thêm/Sửa Rule
 export interface MockPricingRule {
-  rule_id: string;
-  name: string;
-  condition: string;
-  multiplier: number;
+  rule_id: string | number;
+  name?: string; 
+  rule_name: string;
+  rule_type: string;
+  threshold_min: number;
+  threshold_max: number;
+  adjustment_type: string;
+  adjustment_value: number;
+  condition?: string;
+  multiplier?: number;
   priority: number;
   is_active: boolean;
+  valid_from?: string | null;
+  valid_to?: string | null;
 }
