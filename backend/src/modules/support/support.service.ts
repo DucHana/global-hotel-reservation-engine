@@ -117,6 +117,17 @@ export class SupportService {
     return { message: 'Ticket đã được giải quyết' };
   }
 
+  // ── ADMIN: Cập nhật trạng thái thủ công ────────────────────
+  async updateTicketStatus(ticketId: string, status: string) {
+    const ticket = await this.ticketModel.findById(ticketId);
+    if (!ticket) throw new NotFoundException('Ticket không tìm thấy');
+    
+    ticket.status = status;
+    if (status === 'resolved') ticket.resolved_at = new Date();
+    await ticket.save();
+    return { message: `Đã cập nhật trạng thái sang ${status}` };
+  }
+
   // ── ADMIN: Analytics — tickets by category + status ─────────
   async getTicketStats() {
     const pipeline = [

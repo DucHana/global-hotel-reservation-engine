@@ -102,9 +102,6 @@ export const RoomCatalogSchema = SchemaFactory.createForClass(RoomCatalog);
 // Index: Search by hotel + active status
 RoomCatalogSchema.index({ hotel_id: 1, is_active: 1 });
 
-// Index: Amenities filter (array index)
-RoomCatalogSchema.index({ amenities: 1 });
-
 // Index: Price range filter
 RoomCatalogSchema.index({ current_price: 1 });
 

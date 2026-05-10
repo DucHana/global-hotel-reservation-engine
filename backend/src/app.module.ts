@@ -43,31 +43,33 @@ import { PricingSuggestion } from './database/entities/pricing-suggestion.entity
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mssql',
-        host: configService.get<string>('DB_HOST') || 'localhost',
-        // Tạm thời ẩn port để TypeORM tự dò đúng cổng của Instance
-        // port: parseInt(configService.get<string>('DB_PORT') || '1433', 10),
-        username: configService.get<string>('DB_USER') || 'hotel_manager',
-        password: configService.get<string>('DB_PASSWORD') || 'YourPassword123',
-        database: configService.get<string>('DB_NAME') || 'hotel_management',
-        entities: [
-          User,
-          Hotel,
-          RoomType,
-          Booking,
-          PriceHistory,
-          PricingRule,
-          PricingSuggestion,
-        ],
-        synchronize: false,
-        logging: true, // Bật log để xem chi tiết TypeORM kết nối thế nào
-        options: {
-          encrypt: false, // Tắt mã hóa nghiêm ngặt
-          trustServerCertificate: true, // Né lỗi SSL (chứng chỉ không tin cậy)
-          instanceName: 'MSSQLSERVER01', // Rất quan trọng: Trỏ đúng vào Named Instance của bạn
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const instanceName = configService.get<string>('DB_INSTANCE_NAME');
+        return {
+          type: 'mssql',
+          host: configService.get<string>('DB_HOST') || 'localhost',
+          port: !instanceName ? parseInt(configService.get<string>('DB_PORT') || '1433', 10) : undefined,
+          username: configService.get<string>('DB_USER') || 'hotel_manager',
+          password: configService.get<string>('DB_PASSWORD') || 'YourPassword123',
+          database: configService.get<string>('DB_NAME') || 'hotel_management',
+          entities: [
+            User,
+            Hotel,
+            RoomType,
+            Booking,
+            PriceHistory,
+            PricingRule,
+            PricingSuggestion,
+          ],
+          synchronize: false,
+          logging: true,
+          options: {
+            encrypt: false,
+            trustServerCertificate: true,
+            instanceName: instanceName || undefined,
+          },
+        };
+      },
     }),
 
     // Modules

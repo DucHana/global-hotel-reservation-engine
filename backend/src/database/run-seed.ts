@@ -156,13 +156,15 @@ async function run() {
       const sql = fs.readFileSync(filePath, 'utf8');
       
       // Tách chuỗi theo chữ GO (Không phân biệt hoa thường)
+
+      // Split by GO if present
       const batches = sql.split(/\bGO\b/i);
-      
+
       for (let batch of batches) {
         batch = batch.trim();
         // Bỏ qua các lệnh rỗng hoặc lệnh USE database
         if (!batch || batch.toUpperCase().startsWith('USE ')) continue;
-        
+
         try {
           await dataSource.query(batch);
         } catch (err: any) {

@@ -271,6 +271,10 @@ const mockData = {
       is_active: 1,
     },
   ],
+  priceHistory: [
+    { room_type_id: 1, old_price: 4500000, new_price: 5000000, changed_by: 1, note: 'Tăng giá mùa cao điểm' },
+    { room_type_id: 2, old_price: 2600000, new_price: 2400000, changed_by: 1, note: 'Giảm giá khuyến mãi' },
+  ]
 };
 
 export async function seedDatabase(dataSource: DataSource) {
