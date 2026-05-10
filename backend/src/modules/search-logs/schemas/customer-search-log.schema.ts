@@ -1,3 +1,4 @@
+
 // ═══════════════════════════════════════════════════════════════
 // customer-search-log.schema.ts — Thành viên 2
 // MongoDB / Mongoose schema cho Search Logs

@@ -169,6 +169,35 @@ export const hotelsApi = {
     }
     return http<{ data: typeof MOCK_HOTELS }>('/api/hotels');
   },
+  create: async (data: any) => {
+    if (USE_MOCK) {
+      await delay(500);
+      return { message: 'Tạo khách sạn thành công (mock)', data };
+    }
+    return http('/api/hotels', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  update: async (id: number, data: any) => {
+    if (USE_MOCK) {
+      await delay(500);
+      return { message: 'Cập nhật khách sạn thành công (mock)' };
+    }
+    return http(`/api/hotels/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  delete: async (id: number) => {
+    if (USE_MOCK) {
+      await delay(500);
+      return { message: 'Xóa khách sạn thành công (mock)' };
+    }
+    return http(`/api/hotels/${id}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 // ═══════════════════════════════════════════════════
@@ -184,8 +213,19 @@ export const roomsApi = {
       return { data, total: data.length };
     }
     return http<{ data: typeof MOCK_ROOM_TYPES }>(
-      `/api/rooms${hotelId ? '?hotelId=' + hotelId : ''}`
+      `/api/hotels/rooms/all${hotelId ? '?hotelId=' + hotelId : ''}`
     );
+  },
+
+  create: async (data: any) => {
+    if (USE_MOCK) {
+      await delay(500);
+      return { message: 'Tạo loại phòng thành công (mock)', data };
+    }
+    return http('/api/hotels/rooms', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   update: async (id: string | number, payload: {
@@ -250,7 +290,6 @@ export const bookingsApi = {
     }
     return http(`/api/bookings/${id}`);
   },
-
 
   // USER: Đặt phòng mới (calls sp_create_booking internally)
   create: async (payload: {
@@ -644,9 +683,13 @@ export const pricingApi = {
             : '✓ Trigger ghi price_history thành công',
       };
     }
-    return http('/api/pricing/update', {
+    return http('/api/pricing/update-price', {
       method: 'POST',
-      body: JSON.stringify({ roomTypeId, newPrice, reason }),
+      body: JSON.stringify({ 
+        room_type_id: parseInt(roomTypeId), 
+        new_price: newPrice, 
+        reason 
+      }),
     });
   },
 

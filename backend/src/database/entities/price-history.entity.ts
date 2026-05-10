@@ -29,7 +29,9 @@ export class PriceHistory {
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   new_price!: number;
 
-  @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
+  // ✅ Computed column trong SQL: change_pct AS ROUND(...) PERSISTED
+  // TypeORM không được INSERT vào — chỉ được SELECT
+  @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true, insert: false, update: false })
   change_pct?: number | null;
 
   @Column({ type: 'bigint' })

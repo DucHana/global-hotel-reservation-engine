@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Patch, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -8,6 +8,7 @@ import { HotelsService } from './hotels.service';
 export class HotelsController {
   constructor(private hotelsService: HotelsService) {}
 
+  // ── HOTELS CRUD ──
   @Get()
   async getAll() {
     const data = await this.hotelsService.findAll();
@@ -22,25 +23,16 @@ export class HotelsController {
   @Post()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('admin')
-  async create(
-    @Body()
-    createHotelDto: {
-      name: string;
-      address: string;
-      city: string;
-      phone?: string;
-      email?: string;
-    },
-  ) {
-    const hotel = await this.hotelsService.create(createHotelDto);
+  async create(@Body() dto: { name: string; address: string; city: string; phone?: string; email?: string }) {
+    const hotel = await this.hotelsService.create(dto);
     return { message: 'Tạo khách sạn thành công', data: hotel };
   }
 
   @Put(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('admin', 'manager')
-  async update(@Param('id') hotelId: number, @Body() updateHotelDto: any) {
-    const hotel = await this.hotelsService.update(hotelId, updateHotelDto);
+  @Roles('admin')
+  async update(@Param('id') hotelId: number, @Body() dto: any) {
+    const hotel = await this.hotelsService.update(hotelId, dto);
     return { message: 'Cập nhật khách sạn thành công', data: hotel };
   }
 
@@ -49,5 +41,35 @@ export class HotelsController {
   @Roles('admin')
   async delete(@Param('id') hotelId: number) {
     return await this.hotelsService.delete(hotelId);
+  }
+
+  // ── ROOM TYPES ──
+  @Get('rooms/all')
+  async getAllRoomTypes(@Query('hotelId') hotelId?: number) {
+    const data = await this.hotelsService.findAllRoomTypes(hotelId);
+    return { data, total: data.length };
+  }
+
+  @Post('rooms')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
+  async createRoomType(@Body() dto: any) {
+    const roomType = await this.hotelsService.createRoomType(dto);
+    return { message: 'Tạo loại phòng thành công', data: roomType };
+  }
+
+  @Put('rooms/:id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
+  async updateRoomType(@Param('id') id: number, @Body() dto: any) {
+    const rt = await this.hotelsService.updateRoomType(id, dto);
+    return { message: 'Cập nhật loại phòng thành công', data: rt };
+  }
+
+  @Delete('rooms/:id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin')
+  async deleteRoomType(@Param('id') id: number) {
+    return await this.hotelsService.deleteRoomType(id);
   }
 }

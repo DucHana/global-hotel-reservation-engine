@@ -48,4 +48,10 @@ export class PricingUpdateController {
       userId,
     );
   }
+
+  // ✅ GET /api/pricing/suggest - Lấy đề xuất giá AI
+  @Get('suggest')
+  async getSuggestedPrice(@Query('roomTypeId') roomTypeId: number) {
+    return await this.pricingService.getSuggestion(roomTypeId);
+  }
 }
