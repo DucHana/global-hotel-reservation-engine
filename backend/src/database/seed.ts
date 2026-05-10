@@ -7,7 +7,7 @@ const mockData = {
       full_name: 'Dương Chí Chung',
       email: 'chung@tdtu.edu.vn',
       password_hash:
-        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN1jOmVgF5kN8bN9vHf9C', // bcrypt(password, 12)
+        '$2b$12$a6STvnDlE9yQdPZGdkHPLuzKrqdV/WyN4RuO0oQw6MRFE2AGFFatO', // admin123
       phone: '0901234567',
       role: 'admin',
       is_active: 1,
@@ -15,7 +15,7 @@ const mockData = {
     {
       full_name: 'Trần Thanh Liêm',
       email: 'liem@tdtu.edu.vn',
-      password_hash: '$2b$12$abcdefghijklmnopqrstuvwxyz123456789',
+      password_hash: '$2b$12$a6STvnDlE9yQdPZGdkHPLuzKrqdV/WyN4RuO0oQw6MRFE2AGFFatO',
       phone: '0912345678',
       role: 'admin',
       is_active: 1,
@@ -23,9 +23,9 @@ const mockData = {
     {
       full_name: 'Nguyễn Thị Hoa',
       email: 'hoa.nt@gmail.com',
-      password_hash: '$2b$12$abcdefghijklmnopqrstuvwxyz123456789',
+      password_hash: '$2b$12$a6STvnDlE9yQdPZGdkHPLuzKrqdV/WyN4RuO0oQw6MRFE2AGFFatO',
       phone: '0934567890',
-      role: 'user',
+      role: 'customer',
       is_active: 1,
     },
   ],
@@ -134,6 +134,10 @@ const mockData = {
       is_active: 1,
     },
   ],
+  priceHistory: [
+    { room_type_id: 1, old_price: 4500000, new_price: 5000000, changed_by: 1, note: 'Tăng giá mùa cao điểm' },
+    { room_type_id: 2, old_price: 2600000, new_price: 2400000, changed_by: 1, note: 'Giảm giá khuyến mãi' },
+  ]
 };
 
 export async function seedDatabase(dataSource: DataSource) {
@@ -162,6 +166,12 @@ export async function seedDatabase(dataSource: DataSource) {
         `INSERT INTO pricing_rules (rule_name, rule_type, threshold_min, threshold_max, adjustment_type, adjustment_value, max_price_cap, min_price_floor, priority, is_active)
        VALUES (N'${rule.rule_name}', '${rule.rule_type}', ${rule.threshold_min}, ${rule.threshold_max}, '${rule.adjustment_type}', ${rule.adjustment_value}, ${rule.max_price_cap || 'NULL'}, ${rule.min_price_floor || 'NULL'}, ${rule.priority}, ${rule.is_active})`,
     ),
+    // Insert initial history
+    ...mockData.priceHistory.map(
+      (h) => 
+        `INSERT INTO price_history (room_type_id, old_price, new_price, changed_by, note)
+         VALUES (${h.room_type_id}, ${h.old_price}, ${h.new_price}, ${h.changed_by}, N'${h.note}')`
+    )
   ];
 
   for (const query of queries) {

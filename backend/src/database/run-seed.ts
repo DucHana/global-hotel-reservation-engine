@@ -33,14 +33,14 @@ async function run() {
       console.log(`📜 Executing ${file}...`);
       const filePath = path.join(dbDir, file);
       const sql = fs.readFileSync(filePath, 'utf8');
-      
+
       // Split by GO if present
       const batches = sql.split(/\bGO\b/i);
-      
+
       for (let batch of batches) {
         batch = batch.trim();
         if (!batch || batch.toUpperCase().startsWith('USE ')) continue;
-        
+
         try {
           await dataSource.query(batch);
         } catch (err: any) {

@@ -8,7 +8,7 @@ export class PricingRulesService {
   constructor(
     @InjectRepository(PricingRule)
     private rulesRepository: Repository<PricingRule>,
-  ) {}
+  ) { }
 
   async findAll(hotelId?: number) {
     const query = this.rulesRepository.createQueryBuilder('pr');

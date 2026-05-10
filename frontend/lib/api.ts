@@ -584,6 +584,13 @@ export const supportApi = {
       body: JSON.stringify({ admin_id: adminId }),
     });
   },
+  updateStatus: async (id: string, status: string) => {
+    if (USE_MOCK) return { message: 'Updated (mock)' };
+    return http(`/api/support/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
 };
 
 // ═══════════════════════════════════════════════════

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { analyticsApi, usersApi, roomsApi, pricingApi, hotelsApi, bookingsApi, searchApi, supportApi, checkApiHealth } from '@/lib/api';
+import { authApi, analyticsApi, usersApi, roomsApi, pricingApi, hotelsApi, bookingsApi, searchApi, supportApi, checkApiHealth } from '@/lib/api';
 import type {
   MockUser, MockHotel, MockRoomType, MockBooking, MockPriceHistory, MockAnalytics, MockPricingRule
 } from '@/types';
@@ -42,13 +42,13 @@ export default function AdminDashboard() {
   const [hotels, setHotels] = useState<MockHotel[]>([]);
   const [priceHistory, setPriceHistory] = useState<MockPriceHistory[]>([]);
   const [pricingRules, setPricingRules] = useState<MockPricingRule[]>([]);
-  
+
   // Member 1 — Bookings
   const [allBookings, setAllBookings] = useState<MockBooking[]>([]);
   const [bookingFilter, setBookingFilter] = useState('');
-  
+
   // Member 2 — Search analytics + support
-  const [searchAnalytics, setSearchAnalytics] = useState<{topCities:any[];amenities:any[];trend:any[]}>({topCities:[],amenities:[],trend:[]});
+  const [searchAnalytics, setSearchAnalytics] = useState<{ topCities: any[]; amenities: any[]; trend: any[] }>({ topCities: [], amenities: [], trend: [] });
   const [supportTickets, setSupportTickets] = useState<any[]>([]);
   const [supportFilter, setSupportFilter] = useState('');
 
@@ -56,11 +56,11 @@ export default function AdminDashboard() {
   const [selRoom, setSelRoom] = useState<string>('');
   const [newPrice, setNewPrice] = useState<number>(0);
   const [priceReason, setPriceReason] = useState('');
-  
+
   // FIX: Định nghĩa lại kiểu dữ liệu cho suggestion để hết lỗi đỏ
-  const [suggestion, setSuggestion] = useState<{ 
-    suggested_price: number; 
-    reasoning: string; 
+  const [suggestion, setSuggestion] = useState<{
+    suggested_price: number;
+    reasoning: string;
     change_from_base: number; // Trường gây lỗi đỏ trong ảnh
     is_new_room?: boolean;    // Trường gây lỗi đỏ trong ảnh
     confidence?: number;
@@ -97,10 +97,13 @@ export default function AdminDashboard() {
   const [modalHotelAddress, setModalHotelAddress] = useState('');
   const [modalHotelPhone, setModalHotelPhone] = useState('');
   const [modalHotelEmail, setModalHotelEmail] = useState('');
-  
+
   const [editingHotel, setEditingHotel] = useState<MockHotel | null>(null);
   const [editingRule, setEditingRule] = useState<MockPricingRule | null>(null);
   const [editingRoom, setEditingRoom] = useState<MockRoomType | null>(null);
+  const [editingUser, setEditingUser] = useState<MockUser | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
+  const [replyMessage, setReplyMessage] = useState('');
 
   const showToast = useCallback((msg: string, type: 'success' | 'warning' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -186,6 +189,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleUpdateBookingStatus = async (id: string | number, status: string) => {
+    try {
+      setLoading(true);
+      await bookingsApi.updateStatus(id, status);
+      showToast(`Đã ${status === 'confirmed' ? 'xác nhận' : 'hủy'} đơn đặt phòng`, 'success');
+      const res = await bookingsApi.getAll() as { data: MockBooking[] };
+      setAllBookings(res.data);
+    } catch (e: any) {
+      showToast(e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openEditRuleModal = (rule: MockPricingRule) => {
     setEditingRule(rule);
     setRuleName(rule.rule_name);
@@ -204,6 +221,61 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!authLoading && !isAuthenticated) router.push('/auth');
   }, [authLoading, isAuthenticated, router]);
+
+  // Populate user modal
+  useEffect(() => {
+    if (editingUser) {
+      setModalUserName(editingUser.full_name);
+      setModalUserEmail(editingUser.email);
+      setModalUserPhone(editingUser.phone || '');
+      setModalUserRole(editingUser.role as any);
+    } else {
+      setModalUserName('');
+      setModalUserEmail('');
+      setModalUserPhone('');
+      setModalUserRole('customer');
+      setModalUserPassword('');
+    }
+  }, [editingUser]);
+
+  // Populate hotel modal
+  useEffect(() => {
+    if (editingHotel) {
+      setModalHotelName(editingHotel.name);
+      setModalHotelCity(editingHotel.city);
+      setModalHotelAddress(editingHotel.address);
+      setModalHotelPhone(editingHotel.phone || '');
+    } else {
+      setModalHotelName('');
+      setModalHotelCity('');
+      setModalHotelAddress('');
+      setModalHotelPhone('');
+    }
+  }, [editingHotel]);
+ 
+   useEffect(() => {
+     if (editingRule) {
+       setRuleName(editingRule.rule_name);
+       setRuleType(editingRule.rule_type);
+       setTMin(editingRule.threshold_min || 0);
+       setTMax(editingRule.threshold_max || 100);
+       setAdjType(editingRule.adjustment_type);
+       setAdjVal(editingRule.adjustment_value);
+       setPriority(editingRule.priority);
+       setValidFrom(editingRule.valid_from ? String(editingRule.valid_from).split('T')[0] : '');
+       setValidTo(editingRule.valid_to ? String(editingRule.valid_to).split('T')[0] : '');
+     } else {
+       setRuleName('');
+       setRuleType('occupancy');
+       setTMin(0);
+       setTMax(100);
+       setAdjType('percent');
+       setAdjVal(0);
+       setPriority(5);
+       setValidFrom('');
+       setValidTo('');
+     }
+   }, [editingRule]);
 
   // Check API health
   useEffect(() => {
@@ -254,12 +326,13 @@ export default function AdminDashboard() {
           const res = await bookingsApi.getAll() as { data: MockBooking[] };
           setAllBookings(res.data);
         } else if (page === 'search-analytics') {
-          const [cities, amenities, trend] = await Promise.all([
-            searchApi.getAnalytics('top-cities', 30) as Promise<{data:any[]}>,
-            searchApi.getAnalytics('popular-amenities', 30) as Promise<{data:any[]}>,
-            searchApi.getAnalytics('trend', 14) as Promise<{data:any[]}>,
+          const [cities, amenities, trend, prices] = await Promise.all([
+            searchApi.getAnalytics('top-cities', 30) as Promise<{ data: any[] }>,
+            searchApi.getAnalytics('popular-amenities', 30) as Promise<{ data: any[] }>,
+            searchApi.getAnalytics('trend', 14) as Promise<{ data: any[] }>,
+            searchApi.getAnalytics('price-preferences', 30) as Promise<{ data: any[] }>,
           ]);
-          setSearchAnalytics({ topCities: cities.data, amenities: amenities.data, trend: trend.data });
+          setSearchAnalytics({ topCities: cities.data, amenities: amenities.data, trend: trend.data, pricePreferences: prices.data } as any);
         } else if (page === 'support') {
           const res = await supportApi.getAll() as { data: any[] };
           setSupportTickets(res.data);
@@ -447,19 +520,19 @@ export default function AdminDashboard() {
 
           <nav className="sidebar-nav">
             <div className="nav-label">Main</div>
-            {(['dashboard','auth'] as PageId[]).map(id => (
+            {(['dashboard', 'auth'] as PageId[]).map(id => (
               <button key={id} className={`nav-item${page === id ? ' active' : ''}`} onClick={() => setPage(id)}>
                 <span className="nav-icon">{id === 'dashboard' ? '📊' : '🔐'}</span>{PAGE_TITLES[id]}
               </button>
             ))}
             <div className="nav-label">Quản lý</div>
-            {(['users','rooms','hotels'] as PageId[]).map(id => (
+            {(['users', 'rooms', 'hotels'] as PageId[]).map(id => (
               <button key={id} className={`nav-item${page === id ? ' active' : ''}`} onClick={() => setPage(id)}>
                 <span className="nav-icon">{id === 'users' ? '👥' : id === 'rooms' ? '🛏️' : '🏨'}</span>{PAGE_TITLES[id]}
               </button>
             ))}
             <div className="nav-label">Dynamic Pricing</div>
-            {(['pricing','history','rules'] as PageId[]).map(id => (
+            {(['pricing', 'history', 'rules'] as PageId[]).map(id => (
               <button key={id} className={`nav-item${page === id ? ' active' : ''}`} onClick={() => setPage(id)}>
                 <span className="nav-icon">{id === 'pricing' ? '💰' : id === 'history' ? '📜' : '⚙️'}</span>{PAGE_TITLES[id]}
               </button>
@@ -469,7 +542,7 @@ export default function AdminDashboard() {
               <span className="nav-icon">📝</span>Quản lý Đặt phòng
             </button>
             <div className="nav-label">TV2 — NoSQL</div>
-            {(['search-analytics','support'] as PageId[]).map(id => (
+            {(['search-analytics', 'support'] as PageId[]).map(id => (
               <button key={id} className={`nav-item${page === id ? ' active' : ''}`} onClick={() => setPage(id)}>
                 <span className="nav-icon">{id === 'support' ? '📨' : '🔍'}</span>{PAGE_TITLES[id]}
               </button>
@@ -529,13 +602,26 @@ export default function AdminDashboard() {
                       <div className="card">
                         <div className="card-header"><span className="card-title">📊 Doanh thu 6 tháng</span></div>
                         <div className="card-body">
-                          <div style={{ height: 200, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-                            {analytics.monthly_revenue.map((d, i) => (
-                              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <div style={{ width: '100%', background: 'var(--gold)', height: `${(d.revenue / 500) * 100}%`, borderRadius: '4px 4px 0 0' }} />
-                                <div style={{ fontSize: 10, marginTop: 5 }}>{d.month}</div>
-                              </div>
-                            ))}
+                          <div style={{ height: 200, display: 'flex', alignItems: 'flex-end', gap: 12, padding: '20px 0 10px' }}>
+                            {(() => {
+                              const maxRev = Math.max(...analytics.monthly_revenue.map(d => d.revenue || 0), 100);
+                              return analytics.monthly_revenue.map((d, i) => (
+                                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                                  <div 
+                                    style={{ 
+                                      width: '70%', 
+                                      background: 'linear-gradient(to top, var(--gold), var(--gold2))', 
+                                      height: `${(d.revenue / maxRev) * 100}%`, 
+                                      borderRadius: '4px 4px 0 0',
+                                      transition: 'height 0.3s ease',
+                                      cursor: 'pointer'
+                                    }} 
+                                    title={`${d.month}: ₫${fmt(d.revenue)}M`}
+                                  />
+                                  <div style={{ fontSize: 10, marginTop: 10, color: 'var(--text3)' }}>{d.month}</div>
+                                </div>
+                              ));
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -555,6 +641,86 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 )}
+
+                 {/* ─── AUTH & RBAC ─── */}
+                 {page === 'auth' && (
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                     <div className="card">
+                       <div className="card-header">
+                         <span className="card-title">🔐 Role-Based Access Control Matrix</span>
+                       </div>
+                       <div className="card-body">
+                         <p style={{ marginBottom: 20, fontSize: 13, color: 'var(--text3)' }}>
+                           Hệ thống sử dụng cơ chế bảo mật JWT kết hợp phân quyền đa lớp (RBAC). Dưới đây là bảng phân bổ quyền hạn:
+                         </p>
+                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                           <thead>
+                             <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                               <th style={{ textAlign: 'left', padding: '12px' }}>Tính năng</th>
+                               <th style={{ textAlign: 'center', padding: '12px' }}>Super Admin</th>
+                               <th style={{ textAlign: 'center', padding: '12px' }}>Admin</th>
+                               <th style={{ textAlign: 'center', padding: '12px' }}>Customer</th>
+                             </tr>
+                           </thead>
+                           <tbody>
+                             {[
+                               ['Quản lý Người dùng', '✅ Full', '✅ Full', '❌ No'],
+                               ['Cấu hình Hệ thống', '✅ Full', '⚠️ Read-only', '❌ No'],
+                               ['Quản lý Đặt phòng', '✅ View All', '✅ View All', '👤 Own Only'],
+                               ['Điều chỉnh Dynamic Pricing', '✅ Yes', '✅ Yes', '❌ No'],
+                               ['Xem Báo cáo OLAP/Analytics', '✅ Yes', '✅ Yes', '❌ No'],
+                               ['Trả lời Support Tickets', '✅ Yes', '✅ Yes', '❌ No'],
+                               ['Đăng bài Tìm kiếm / Booking', '✅ Yes', '✅ Yes', '✅ Yes'],
+                             ].map(([feature, superAdmin, admin, customer]) => (
+                               <tr key={feature} style={{ borderBottom: '1px solid var(--border)' }}>
+                                 <td style={{ fontWeight: 600, padding: '12px' }}>{feature}</td>
+                                 <td style={{ textAlign: 'center', color: 'var(--success)', padding: '12px' }}>{superAdmin}</td>
+                                 <td style={{ textAlign: 'center', padding: '12px', color: admin.includes('✅') ? 'var(--success)' : admin.includes('⚠️') ? 'var(--warning)' : 'var(--danger)' }}>{admin}</td>
+                                 <td style={{ textAlign: 'center', padding: '12px', color: customer.includes('✅') || customer.includes('👤') ? 'var(--success)' : 'var(--danger)' }}>{customer}</td>
+                                </tr>
+                             ))}
+                           </tbody>
+                         </table>
+                       </div>
+                     </div>
+ 
+                     <div className="grid-2">
+                       <div className="card">
+                         <div className="card-header"><span className="card-title">🛡️ Session Security</span></div>
+                         <div className="card-body">
+                           <div className="form-group">
+                             <label>JWT Token Algorithm</label>
+                             <input type="text" readOnly value="HS256 (HMAC with SHA-256)" />
+                           </div>
+                           <div className="form-group">
+                             <label>Token Expiration</label>
+                             <input type="text" readOnly value="24 Hours" />
+                           </div>
+                           <div style={{ padding: '12px', background: 'rgba(79,135,255,.05)', borderRadius: 8, fontSize: 12 }}>
+                             <span style={{ color: 'var(--accent2)', fontWeight: 600 }}>Pro-tip:</span> Toàn bộ các API endpoint trong hệ thống đều được bảo vệ bởi <code>AuthGuard</code> và <code>RolesGuard</code> ở tầng Backend NestJS.
+                           </div>
+                         </div>
+                       </div>
+                       <div className="card">
+                         <div className="card-header"><span className="card-title">👤 Current Session</span></div>
+                         <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
+                             <div className="user-avatar" style={{ width: 60, height: 60, fontSize: 24 }}>{user?.full_name?.[0]}</div>
+                             <div>
+                               <div style={{ fontSize: 18, fontWeight: 700 }}>{user?.full_name}</div>
+                               <div style={{ color: 'var(--gold)' }}>{user?.role?.toUpperCase()} ACCESS</div>
+                             </div>
+                           </div>
+                           <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '5px 0' }} />
+                           <div style={{ fontSize: 13 }}>
+                             <div style={{ marginBottom: 8 }}><strong>User ID:</strong> <code style={{ color: 'var(--accent2)' }}>{user?.user_id}</code></div>
+                             <div><strong>Login Time:</strong> {new Date().toLocaleString()}</div>
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 )}
 
                 {/* ─── ROOMS ─── */}
                 {page === 'rooms' && (
@@ -681,7 +847,7 @@ export default function AdminDashboard() {
                         {pricingRules.map(r => (
                           <tr key={r.rule_id}>
                             <td style={{ fontWeight: 600 }}>{r.rule_name}</td>
-                            <td>{r.rule_type === 'occupancy' ? `${r.threshold_min}% - ${r.threshold_max}%` : r.rule_type}</td>
+                            <td>{r.rule_type === 'occupancy' ? `${r.threshold_min}% - ${r.threshold_max}%` : `${new Date(r.valid_from).toLocaleDateString()} - ${new Date(r.valid_to).toLocaleDateString()}`}</td>
                             <td style={{ fontWeight: 700, color: r.adjustment_value > 0 ? 'var(--success)' : 'var(--danger)' }}>
                               {r.adjustment_type === 'percent' ? `${r.adjustment_value > 0 ? '+' : ''}${r.adjustment_value}%` : `₫${fmt(r.adjustment_value)}`}
                             </td>
@@ -708,7 +874,234 @@ export default function AdminDashboard() {
                   </div>
                 )}
 
-                {/* Các phần khác (Users, Hotels, Bookings, Search Analytics, Support) render tương tự... */}
+                {/* ─── USERS ─── */}
+                {page === 'users' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">👥 Người dùng</span>
+                      <button className="btn btn-primary" onClick={() => { setEditingUser(null); setModalOpen('addUser'); }}>+ Thêm</button>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th>Hành động</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map(u => (
+                          <tr key={u.user_id}>
+                            <td style={{ fontWeight: 600 }}>{u.full_name}</td>
+                            <td>{u.email}</td>
+                            <td><span className="badge badge-active" style={{ background: 'rgba(79,135,255,.1)', color: 'var(--accent2)' }}>{u.role}</span></td>
+                            <td><span className={`badge ${u.is_active ? 'badge-active' : 'badge-inactive'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td>
+                            <td>
+                              <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => { setEditingUser(u); setModalOpen('addUser'); }}>Sửa</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── HOTELS ─── */}
+                {page === 'hotels' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">🏨 Chi nhánh</span>
+                      <button className="btn btn-primary" onClick={() => { setEditingHotel(null); setModalOpen('addHotel'); }}>+ Thêm</button>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Tên chi nhánh</th><th>Thành phố</th><th>Địa chỉ</th><th>Hành động</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hotels.map(h => (
+                          <tr key={h.hotel_id}>
+                            <td style={{ fontWeight: 600 }}>{h.name}</td>
+                            <td>{h.city}</td>
+                            <td>{h.address}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => { setEditingHotel(h); setModalOpen('addHotel'); }}>Sửa</button>
+                                <button className="btn btn-danger" style={{ padding: '4px 8px' }} onClick={() => handleDeleteHotel(h.hotel_id)}>Xóa</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── BOOKINGS (TV1) ─── */}
+                {page === 'bookings' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">📝 Quản lý Đặt phòng</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>ID</th><th>Khách hàng</th><th>Loại phòng</th><th>Check-in</th><th>Check-out</th><th>Trạng thái</th><th>Hành động</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allBookings.map(b => (
+                          <tr key={b.booking_id}>
+                            <td>{b.booking_id.toString().slice(-6)}</td>
+                            <td style={{ fontWeight: 600 }}>{b.user_name}</td>
+                            <td>{b.room_name}</td>
+                            <td>{new Date(b.check_in).toLocaleDateString()}</td>
+                            <td>{new Date(b.check_out).toLocaleDateString()}</td>
+                            <td><span className={`badge ${b.status === 'confirmed' ? 'badge-active' : b.status === 'pending' ? 'badge-warning' : 'badge-inactive'}`}>{b.status}</span></td>
+                            <td>
+                              {b.status === 'pending' && (
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => handleUpdateBookingStatus(b.booking_id, 'confirmed')}>Xác nhận</button>
+                                  <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => handleUpdateBookingStatus(b.booking_id, 'cancelled')}>Hủy</button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── PRICE HISTORY ─── */}
+                {page === 'history' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">📜 Lịch sử biến động giá (SQL Trigger)</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Loại phòng</th><th>Giá cũ</th><th>Giá mới</th><th>Biến động</th><th>Ngày thay đổi</th><th>Ghi chú</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {priceHistory.map((h, i) => (
+                          <tr key={i}>
+                            <td style={{ fontWeight: 600 }}>{h.room_type_name}</td>
+                            <td>₫{fmt(h.old_price)}</td>
+                            <td style={{ color: h.alert_flag ? 'var(--danger)' : 'var(--success)', fontWeight: 600 }}>₫{fmt(h.new_price)}</td>
+                            <td>{h.change_pct}%</td>
+                            <td>{new Date(h.changed_at || Date.now()).toLocaleString()}</td>
+                            <td><span style={{ fontSize: 11, color: 'var(--text3)' }}>{h.note || 'Cập nhật hệ thống'}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── SEARCH ANALYTICS (TV2) ─── */}
+                {page === 'search-analytics' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div className="grid-cols-2">
+                      <div className="card">
+                        <div className="card-header"><span className="card-title">🔍 Top thành phố tìm kiếm</span></div>
+                        <div className="card-body">
+                          <table style={{ fontSize: 12 }}>
+                            <thead><tr><th>Thành phố</th><th>Lượt tìm</th><th>Conversion</th></tr></thead>
+                            <tbody>
+                              {searchAnalytics.topCities.map((c, i) => (
+                                <tr key={i}><td>{c.city}</td><td>{c.search_count}</td><td style={{ color: 'var(--gold)' }}>{c.conversion_rate}%</td></tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <div className="card">
+                        <div className="card-header"><span className="card-title">🛋️ Tiện nghi quan tâm</span></div>
+                        <div className="card-body">
+                          <table style={{ fontSize: 12 }}>
+                            <thead><tr><th>Tiện nghi</th><th>Lượt yêu cầu</th></tr></thead>
+                            <tbody>
+                              {searchAnalytics.amenities.map((a, i) => (
+                                <tr key={i}><td>{a.amenity}</td><td>{a.count}</td></tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="card">
+                      <div className="card-header"><span className="card-title">📈 Xu hướng tìm kiếm (14 ngày qua)</span></div>
+                      <div className="card-body">
+                        <div style={{ height: 180, display: 'flex', alignItems: 'flex-end', gap: 8, padding: '20px 10px 0' }}>
+                          {searchAnalytics.trend.map((t, i) => (
+                            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, height: '100%' }}>
+                              <div style={{ display: 'flex', width: '100%', alignItems: 'flex-end', height: '100%', gap: 2 }}>
+                                <div style={{ flex: 1, background: 'var(--accent)', height: `${Math.min(100, (t.searches / 100) * 100)}%`, borderRadius: '4px 4px 0 0', opacity: 0.8 }} title={`${t.date}: ${t.searches} lượt tìm`} />
+                                <div style={{ flex: 1, background: 'var(--gold)', height: `${Math.min(100, (t.conversions / 20) * 100)}%`, borderRadius: '4px 4px 0 0', opacity: 0.8 }} title={`${t.date}: ${t.conversions} chuyển đổi`} />
+                              </div>
+                              <div style={{ fontSize: 9, color: 'var(--text3)', whiteSpace: 'nowrap' }}>{t.date.split('-')[2]}/{t.date.split('-')[1]}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 15, justifyContent: 'center', marginTop: 15 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text2)' }}><div style={{ width: 8, height: 8, background: 'var(--accent)', borderRadius: 2 }} /> Lượt tìm</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text2)' }}><div style={{ width: 8, height: 8, background: 'var(--gold)', borderRadius: 2 }} /> Chuyển đổi</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="card">
+                      <div className="card-header"><span className="card-title">💰 Phân khúc giá khách hàng quan tâm</span></div>
+                      <div className="card-body">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {(searchAnalytics as any).pricePreferences?.map((p: any, i: number) => (
+                            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                                <span style={{ color: 'var(--text2)' }}>{p.range}</span>
+                                <span style={{ fontWeight: 600 }}>{p.count} lượt</span>
+                              </div>
+                              <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', background: 'linear-gradient(90deg, var(--gold), var(--gold2))', width: `${Math.min(100, (p.count / 100) * 100)}%` }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── SUPPORT (TV2) ─── */}
+                {page === 'support' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">🎧 Hỗ trợ khách hàng (MongoDB)</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Khách hàng</th><th>Chủ đề</th><th>Nội dung</th><th>Ngày gửi</th><th>Trạng thái</th><th>Hành động</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {supportTickets.map((t, i) => (
+                          <tr key={t._id || i}>
+                            <td style={{ fontWeight: 600 }}>{t.user_name || t.customer_name}</td>
+                            <td>{t.subject}</td>
+                            <td><div style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>{t.message}</div></td>
+                            <td>{new Date(t.created_at).toLocaleDateString()}</td>
+                            <td><span className={`badge ${t.status === 'closed' ? 'badge-inactive' : t.status === 'open' ? 'badge-active' : 'badge-warning'}`}>{t.status}</span></td>
+                             <td>
+                               <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => { setSelectedTicket(t); setModalOpen('viewTicket'); }}>Xem</button>
+                             </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -789,6 +1182,12 @@ export default function AdminDashboard() {
                   <div className="form-group"><label>Max (%)</label><input type="number" value={tMax} onChange={e => setTMax(Number(e.target.value))} /></div>
                 </div>
               )}
+              {ruleType === 'season' && (
+                <div className="form-row">
+                  <div className="form-group"><label>Bắt đầu</label><input type="date" value={validFrom} onChange={e => setValidFrom(e.target.value)} /></div>
+                  <div className="form-group"><label>Kết thúc</label><input type="date" value={validTo} onChange={e => setValidTo(e.target.value)} /></div>
+                </div>
+              )}
               <div className="form-row">
                 <div className="form-group">
                   <label>Điều chỉnh</label>
@@ -806,22 +1205,231 @@ export default function AdminDashboard() {
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setModalOpen(null)}>Hủy</button>
               <button className="btn btn-primary" onClick={async () => {
-                 const payload = {
-                    rule_name: ruleName,
-                    rule_type: ruleType,
-                    threshold_min: tMin,
-                    threshold_max: tMax,
-                    adjustment_type: adjType,
-                    adjustment_value: adjVal,
-                    priority: priority,
-                    is_active: editingRule ? editingRule.is_active : true
-                 };
-                 if (editingRule) await pricingApi.updateRule(editingRule.rule_id, payload);
-                 else await pricingApi.createRule(payload);
-                 setModalOpen(null);
-                 const res = await pricingApi.getRules() as any;
-                 setPricingRules(res.data);
+                const payload = {
+                  rule_name: ruleName,
+                  rule_type: ruleType,
+                  threshold_min: tMin,
+                  threshold_max: tMax,
+                  adjustment_type: adjType,
+                  adjustment_value: adjVal,
+                  priority: priority,
+                  valid_from: ruleType === 'season' ? validFrom : null,
+                  valid_to: ruleType === 'season' ? validTo : null,
+                  is_active: editingRule ? editingRule.is_active : true
+                };
+                if (editingRule) await pricingApi.updateRule(editingRule.rule_id, payload);
+                else await pricingApi.createRule(payload);
+                setModalOpen(null);
+                const res = await pricingApi.getRules() as any;
+                setPricingRules(res.data);
               }}>Lưu</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalOpen === 'addUser' && (
+        <div className="modal-overlay" onClick={() => setModalOpen(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">{editingUser ? 'Sửa người dùng' : 'Thêm người dùng'}</div>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Họ tên</label>
+                <input type="text" value={modalUserName} onChange={e => setModalUserName(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>Email</label>
+                <input type="email" value={modalUserEmail} onChange={e => setModalUserEmail(e.target.value)} />
+              </div>
+              {!editingUser && (
+                <div className="form-group">
+                  <label>Mật khẩu</label>
+                  <input type="password" value={modalUserPassword} onChange={e => setModalUserPassword(e.target.value)} placeholder="Mặc định: admin123" />
+                </div>
+              )}
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Số điện thoại</label>
+                  <input type="text" value={modalUserPhone} onChange={e => setModalUserPhone(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>Vai trò</label>
+                  <select value={modalUserRole} onChange={e => setModalUserRole(e.target.value as any)}>
+                    <option value="customer">Customer</option>
+                    <option value="admin">Admin</option>
+                    <option value="superadmin">Super Admin</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setModalOpen(null)}>Hủy</button>
+              <button className="btn btn-primary" onClick={async () => {
+                const payload = { full_name: modalUserName, email: modalUserEmail, phone: modalUserPhone, role: modalUserRole };
+                if (editingUser) await usersApi.update(editingUser.user_id, payload);
+                else await authApi.register({ ...payload, password: modalUserPassword || 'admin123' });
+                setModalOpen(null);
+                const res = await usersApi.getAll() as any;
+                setUsers(res.data);
+                showToast('Lưu người dùng thành công');
+              }}>Lưu</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalOpen === 'addHotel' && (
+        <div className="modal-overlay" onClick={() => setModalOpen(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">{editingHotel ? 'Sửa chi nhánh' : 'Thêm chi nhánh'}</div>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Tên khách sạn</label>
+                <input type="text" value={modalHotelName} onChange={e => setModalHotelName(e.target.value)} />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Thành phố</label>
+                  <input type="text" value={modalHotelCity} onChange={e => setModalHotelCity(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>Số điện thoại</label>
+                  <input type="text" value={modalHotelPhone} onChange={e => setModalHotelPhone(e.target.value)} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Địa chỉ</label>
+                <textarea value={modalHotelAddress} onChange={e => setModalHotelAddress(e.target.value)} />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setModalOpen(null)}>Hủy</button>
+              <button className="btn btn-primary" onClick={async () => {
+                const payload = { name: modalHotelName, city: modalHotelCity, address: modalHotelAddress, phone: modalHotelPhone };
+                if (editingHotel) await hotelsApi.update(Number(editingHotel.hotel_id), payload);
+                else await hotelsApi.create(payload);
+                setModalOpen(null);
+                const res = await hotelsApi.getAll() as any;
+                setHotels(res.data);
+                showToast('Lưu chi nhánh thành công');
+              }}>Lưu</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalOpen === 'viewTicket' && selectedTicket && (
+        <div className="modal-overlay" onClick={() => setModalOpen(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
+            <div className="modal-header">
+              <div className="modal-title">Chi tiết hỗ trợ #{selectedTicket._id?.toString().slice(-6)}</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {selectedTicket.status !== 'resolved' && (
+                  <button className="btn btn-success" style={{ padding: '4px 12px', fontSize: 12 }} onClick={async () => {
+                    try {
+                      await supportApi.resolve(String(selectedTicket._id), String(user?.user_id));
+                      showToast('Đã đánh dấu yêu cầu là đã giải quyết', 'success');
+                      setModalOpen(null);
+                      const res = await supportApi.getAll() as any;
+                      setSupportTickets(res.data);
+                    } catch (err: any) {
+                      showToast(err.message || 'Lỗi khi đóng ticket', 'error');
+                    }
+                  }}>Đã giải quyết</button>
+                )}
+                <button onClick={() => setModalOpen(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>✕</button>
+              </div>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text3)' }}>Khách hàng</div>
+                  <div style={{ fontWeight: 600 }}>{selectedTicket.customer_name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--accent2)' }}>{selectedTicket.email}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 5 }}>Trạng thái</div>
+                  <select 
+                    value={selectedTicket.status} 
+                    onChange={async (e) => {
+                      const newStatus = e.target.value;
+                      try {
+                        await supportApi.updateStatus(String(selectedTicket._id), newStatus);
+                        showToast(`Đã chuyển trạng thái sang ${newStatus}`, 'success');
+                        setSelectedTicket({ ...selectedTicket, status: newStatus });
+                        const res = await supportApi.getAll() as any;
+                        setSupportTickets(res.data);
+                      } catch (err: any) {
+                        showToast(err.message, 'error');
+                      }
+                    }}
+                    style={{ background: 'var(--bg3)', color: 'white', border: '1px solid var(--border)', borderRadius: 6, padding: '2px 8px', fontSize: 12 }}
+                  >
+                    <option value="open">Open</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,.03)', borderRadius: 12, padding: 15, border: '1px solid var(--border)' }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--gold)' }}>Chủ đề: {selectedTicket.subject}</div>
+                <div style={{ fontSize: 13, color: 'var(--text2)', whiteSpace: 'pre-wrap' }}>{selectedTicket.message}</div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 10 }}>Gửi lúc: {new Date(selectedTicket.created_at || selectedTicket.createdAt).toLocaleString()}</div>
+              </div>
+
+              {/* Lịch sử phản hồi */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 600 }}>Lịch sử phản hồi ({selectedTicket.replies?.length || 0})</div>
+                {(!selectedTicket.replies || selectedTicket.replies.length === 0) ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text3)', fontSize: 12, border: '1px dashed var(--border)', borderRadius: 10 }}>Chưa có phản hồi nào</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 200, overflowY: 'auto', paddingRight: 5 }}>
+                    {selectedTicket.replies.map((r: any, i: number) => (
+                      <div key={i} style={{ background: 'var(--bg3)', padding: 12, borderRadius: '12px 12px 12px 0', border: '1px solid var(--border)', alignSelf: 'flex-start', maxWidth: '90%' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent2)', marginBottom: 4 }}>Admin: {r.admin_name}</div>
+                        <div style={{ fontSize: 13 }}>{r.message}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>{new Date(r.replied_at).toLocaleString()}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {selectedTicket.status !== 'resolved' && (
+                <div className="form-group">
+                  <label>Gửi phản hồi mới</label>
+                  <textarea 
+                    value={replyMessage}
+                    onChange={e => setReplyMessage(e.target.value)}
+                    placeholder="Nhập nội dung phản hồi..." 
+                    rows={3}
+                    style={{ width: '100%', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, color: 'white', resize: 'none' }}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setModalOpen(null)}>Đóng</button>
+              {selectedTicket.status !== 'resolved' && (
+                <button className="btn btn-primary" disabled={!replyMessage.trim()} onClick={async () => {
+                  try {
+                    await supportApi.reply(String(selectedTicket._id), String(user?.user_id), user?.full_name || 'Admin', replyMessage);
+                    showToast('Đã gửi phản hồi thành công', 'success');
+                    setReplyMessage('');
+                    setModalOpen(null);
+                    const res = await supportApi.getAll() as any;
+                    setSupportTickets(res.data);
+                  } catch (err: any) {
+                    showToast(err.message || 'Lỗi khi gửi phản hồi', 'error');
+                  }
+                }}>Gửi phản hồi</button>
+              )}
             </div>
           </div>
         </div>

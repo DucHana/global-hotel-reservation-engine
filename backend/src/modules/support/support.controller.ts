@@ -92,4 +92,15 @@ export class SupportController {
   ) {
     return this.supportService.resolveTicket(id, body.admin_id);
   }
+
+  // ── ADMIN: Cập nhật trạng thái thủ công ────────────────────
+  @Patch(':id/status')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('admin', 'superadmin')
+  async updateStatus(
+    @Param('id') id: string,
+    @Body('status') status: string,
+  ) {
+    return this.supportService.updateTicketStatus(id, status);
+  }
 }
