@@ -56,6 +56,13 @@ export class RoomsController {
     return { data, total: data.length };
   }
 
+  // ── USER: Danh sách amenities để build bộ lọc ───────────────
+  // GET /api/rooms/amenities
+  @Get('amenities')
+  async getAmenities() {
+    return this.roomsService.getAmenities();
+  }
+
   // ── USER: Chi tiết phòng (SQL + MongoDB merged) ─────────────
   // GET /api/rooms/:id
   @Get(':id')

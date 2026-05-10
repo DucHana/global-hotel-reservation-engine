@@ -1,8 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 // bookings.service.ts — Thành viên 1
-// Concurrency Control: Pessimistic Locking (UPDLOCK + HOLDLOCK)
-// ACID Transaction: sp_create_booking Stored Procedure
-// Isolation Level: READ COMMITTED (default) / SERIALIZABLE khi book
+// Đã fix lỗi ngày tháng & Bổ sung log bắt lỗi Stored Procedure
 // ═══════════════════════════════════════════════════════════════
 import {
   Injectable,
@@ -21,22 +19,24 @@ export class BookingsService {
 
   // ─────────────────────────────────────────────────────────────
   // 1. CREATE BOOKING — ACID Transaction + Pessimistic Locking
-  //    Calls sp_create_booking (stored procedure) which uses:
-  //    • SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
-  //    • SELECT ... WITH (UPDLOCK, HOLDLOCK) to prevent double booking
-  //    • ROLLBACK on any conflict or capacity exceeded
   // ─────────────────────────────────────────────────────────────
   async createBooking(dto: CreateBookingDto) {
     const checkIn = new Date(dto.check_in_date);
     const checkOut = new Date(dto.check_out_date);
+    
+    // FIX: Chuẩn hóa thời gian về nửa đêm (00:00:00) để không bị lệch múi giờ
+    checkIn.setHours(0, 0, 0, 0);
+    checkOut.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     if (checkIn >= checkOut) {
-      throw new BadRequestException('check_out_date phải sau check_in_date');
+      throw new BadRequestException('Ngày trả phòng (check_out) phải sau ngày nhận phòng (check_in)');
     }
-    if (checkIn < new Date()) {
-      throw new BadRequestException('check_in_date không thể là ngày trong quá khứ');
+    if (checkIn < today) {
+      throw new BadRequestException('Không thể đặt phòng cho ngày trong quá khứ');
     }
 
-    // Call the stored procedure — it handles locking + transaction internally
     let result: any[];
     try {
       result = await this.dataSource.query(
@@ -44,22 +44,23 @@ export class BookingsService {
         [dto.user_id, dto.room_type_id, dto.check_in_date, dto.check_out_date],
       );
     } catch (err: any) {
-      // SQL Server error 50001 = Double Booking detected (RAISERROR in SP)
+      // Bổ sung dòng này để lật tẩy lỗi nếu Stored Procedure code sai:
+      console.error('❌ [BookingsService] Lỗi từ SQL Server (sp_create_booking):', err.message || err);
+
       if (err?.originalError?.message?.includes('DOUBLE_BOOKING')) {
         throw new ConflictException(
           'Phòng đã hết chỗ trong khoảng thời gian này. Vui lòng chọn ngày khác.',
         );
       }
-      // SQL Server error 50002 = Capacity exceeded
       if (err?.originalError?.message?.includes('CAPACITY_EXCEEDED')) {
         throw new ConflictException('Loại phòng không còn phòng trống trong thời gian này.');
       }
-      throw new InternalServerErrorException('Lỗi khi tạo đặt phòng: ' + err.message);
+      throw new InternalServerErrorException('Lỗi hệ thống khi tạo đặt phòng: ' + err.message);
     }
 
     const row = result?.[0];
     if (!row || row.status === 'ERROR') {
-      throw new ConflictException(row?.message || 'Không thể tạo đặt phòng');
+      throw new ConflictException(row?.message || 'Không thể tạo đặt phòng. Vui lòng thử lại sau.');
     }
 
     return {
@@ -186,7 +187,6 @@ export class BookingsService {
 
   // ─────────────────────────────────────────────────────────────
   // 4. UPDATE BOOKING STATUS (Admin: confirm / cancel / complete)
-  //    Uses explicit transaction + audit log
   // ─────────────────────────────────────────────────────────────
   async updateStatus(
     bookingId: number,
@@ -200,7 +200,6 @@ export class BookingsService {
 
     const booking = await this.findById(bookingId);
 
-    // Business rules for status transitions
     const transitions: Record<string, string[]> = {
       pending:   ['confirmed', 'cancelled'],
       confirmed: ['completed', 'cancelled'],
@@ -213,7 +212,6 @@ export class BookingsService {
       );
     }
 
-    // Run inside explicit transaction + write audit log
     const runner = this.dataSource.createQueryRunner();
     await runner.connect();
     await runner.startTransaction('READ COMMITTED');

@@ -39,7 +39,7 @@ export default function ProfilePage() {
     if (!user) return;
     setLoadingBookings(true);
     try {
-      const res: any = await bookingsApi.getMyBookings(String(user.user_id));
+      const res: any = await bookingsApi.getMyBookings();
       setBookings(res.data || []);
     } catch (err) {
       console.error('Error fetching bookings', err);
@@ -64,7 +64,7 @@ export default function ProfilePage() {
   const handleCancelBooking = async (bookingId: string) => {
     if (!confirm('Bạn có chắc chắn muốn hủy đặt phòng này?')) return;
     try {
-      await bookingsApi.cancel(bookingId, String(user?.user_id));
+      await bookingsApi.cancel(bookingId);
       alert('Hủy phòng thành công');
       fetchBookings();
     } catch (err: any) {

@@ -43,33 +43,4 @@ export class HotelsController {
     return await this.hotelsService.delete(hotelId);
   }
 
-  // ── ROOM TYPES ──
-  @Get('rooms/all')
-  async getAllRoomTypes(@Query('hotelId') hotelId?: number) {
-    const data = await this.hotelsService.findAllRoomTypes(hotelId);
-    return { data, total: data.length };
-  }
-
-  @Post('rooms')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('admin')
-  async createRoomType(@Body() dto: any) {
-    const roomType = await this.hotelsService.createRoomType(dto);
-    return { message: 'Tạo loại phòng thành công', data: roomType };
-  }
-
-  @Put('rooms/:id')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('admin')
-  async updateRoomType(@Param('id') id: number, @Body() dto: any) {
-    const rt = await this.hotelsService.updateRoomType(id, dto);
-    return { message: 'Cập nhật loại phòng thành công', data: rt };
-  }
-
-  @Delete('rooms/:id')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('admin')
-  async deleteRoomType(@Param('id') id: number) {
-    return await this.hotelsService.deleteRoomType(id);
-  }
-}
+}

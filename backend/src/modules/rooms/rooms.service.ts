@@ -154,6 +154,20 @@ export class RoomsService {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // 1b. GET DISTINCT AMENITIES (for search filter UI)
+  // ─────────────────────────────────────────────────────────────
+  async getAmenities() {
+    const amenities = await this.roomCatalogModel.distinct('amenities', {
+      is_active: true,
+    });
+    const data = (amenities || [])
+      .filter((a) => typeof a === 'string' && a.trim().length > 0)
+      .map((a) => String(a).trim())
+      .sort((a, b) => a.localeCompare(b));
+    return { data, total: data.length };
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // 2. GET ROOM DETAIL (SQL + MongoDB merged)
   // ─────────────────────────────────────────────────────────────
   async findById(roomTypeId: number) {

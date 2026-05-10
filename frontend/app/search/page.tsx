@@ -16,6 +16,7 @@ function SearchResultsContent() {
   const checkIn = searchParams.get('checkIn') || '';
   const checkOut = searchParams.get('checkOut') || '';
   const guests = parseInt(searchParams.get('guests') || '1');
+  const amenities = searchParams.get('amenities') || '';
 
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +29,13 @@ function SearchResultsContent() {
       setLoading(true);
       const start = Date.now();
       try {
-        const res: any = await searchApi.searchRooms({ city, checkIn, checkOut, guests });
+        const res: any = await searchApi.searchRooms({
+          city,
+          checkIn,
+          checkOut,
+          guests,
+          amenities: amenities ? [amenities] : undefined,
+        });
         setRooms(res.data);
         
         // Log the search (Thành viên 2)
@@ -39,6 +46,7 @@ function SearchResultsContent() {
           check_in: checkIn || new Date().toISOString(),
           check_out: checkOut || new Date(Date.now() + 86400000).toISOString(),
           guests,
+          filters: amenities ? { amenities: [amenities] } : {},
           results_count: res.data.length,
           session_id: sid,
           response_time_ms: Date.now() - start
@@ -51,7 +59,7 @@ function SearchResultsContent() {
       }
     };
     fetchRooms();
-  }, [city, checkIn, checkOut, guests]);
+  }, [city, checkIn, checkOut, guests, amenities]);
 
   const handleBook = async () => {
     if (!bookingModal) return;
@@ -63,18 +71,17 @@ function SearchResultsContent() {
     setBookingLoading(true);
     try {
       const availRes = await bookingsApi.checkAvailability(bookingModal.room_type_id, checkIn, checkOut);
-      if (!(availRes as any).available) {
+      if (!(availRes as any).is_available) {
         alert('Phòng đã hết chỗ trong khoảng thời gian này.');
         return;
       }
 
-      const res = await bookingsApi.create({
-        user_id: Number(user.user_id),
+      await bookingsApi.create({
         room_type_id: bookingModal.room_type_id,
         check_in_date: checkIn,
         check_out_date: checkOut,
       });
-      alert('Booking successful! Transaction committed.');
+      alert('Đặt phòng thành công! Giao dịch đã được xác nhận.');
       
       // Mark as converted
       if (sessionId) {
@@ -83,7 +90,7 @@ function SearchResultsContent() {
 
       setBookingModal(null);
     } catch (err: any) {
-      alert(err.message || 'Double Booking detected! Transaction rolled back.');
+      alert(err.message || 'Phát hiện trùng đặt phòng, giao dịch đã hoàn tác.');
     } finally {
       setBookingLoading(false);
     }
@@ -101,19 +108,19 @@ function SearchResultsContent() {
         </Link>
         <div className="flex gap-4 text-sm font-medium items-center">
           <div className="glass px-4 py-2 rounded-full text-white/80">
-            {city || 'Anywhere'} • {checkIn} to {checkOut} • {guests} Guest{guests > 1 ? 's' : ''}
+            {city || 'Tất cả điểm đến'} • {checkIn} đến {checkOut} • {guests} khách{amenities ? ` • ${amenities}` : ''}
           </div>
           {isAuthenticated ? (
-            <Link href="/profile" className="hover:text-[#d4af37] transition-colors ml-4">My Profile</Link>
+            <Link href="/profile" className="hover:text-[#d4af37] transition-colors ml-4">Hồ sơ của tôi</Link>
           ) : (
-            <Link href="/auth" className="hover:text-[#d4af37] transition-colors ml-4">Sign In</Link>
+            <Link href="/auth" className="hover:text-[#d4af37] transition-colors ml-4">Đăng nhập</Link>
           )}
         </div>
       </nav>
 
       <main className="max-w-6xl mx-auto px-6 py-12">
         <h1 className="text-3xl font-light mb-8">
-          Found <span className="font-bold text-[#d4af37]">{rooms.length}</span> luxury stays
+          Tìm thấy <span className="font-bold text-[#d4af37]">{rooms.length}</span> lựa chọn lưu trú
         </h1>
 
         {loading ? (
@@ -128,7 +135,11 @@ function SearchResultsContent() {
               <div key={room.room_type_id} className="glass-panel rounded-2xl overflow-hidden flex flex-col hover:-translate-y-1 transition-all duration-300 animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s` }}>
                 <div className="h-48 bg-gray-800 relative">
                   {/* We simulate an image since MongoDB stores image arrays */}
-                  <img src={room.images?.[0] || `https://picsum.photos/seed/${room.room_type_id}/600/400`} className="w-full h-full object-cover opacity-80" alt={room.name} />
+                  <img
+                    src={room.images?.[0]?.url || room.images?.[0] || `https://placehold.co/1200x800/png?text=Room+${room.room_type_id}`}
+                    className="w-full h-full object-cover opacity-80"
+                    alt={room.name}
+                  />
                   <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold text-[#d4af37]">
                     ₫{room.base_price?.toLocaleString()} / night
                   </div>
@@ -143,7 +154,7 @@ function SearchResultsContent() {
                         {a}
                       </span>
                     ))}
-                    {room.amenities?.length > 3 && <span className="text-[10px] text-white/50 py-1">+{room.amenities.length - 3} more</span>}
+                    {room.amenities?.length > 3 && <span className="text-[10px] text-white/50 py-1">+{room.amenities.length - 3} tiện nghi</span>}
                   </div>
 
                   <div className="mt-auto">
@@ -151,7 +162,7 @@ function SearchResultsContent() {
                       onClick={() => setBookingModal(room)}
                       className="w-full btn-luxury py-3 rounded-xl text-sm font-semibold tracking-wider uppercase"
                     >
-                      Book Now
+                      Đặt ngay
                     </button>
                   </div>
                 </div>
@@ -165,30 +176,30 @@ function SearchResultsContent() {
       {bookingModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="glass-panel p-8 rounded-2xl w-full max-w-md animate-fade-in-up">
-            <h2 className="text-2xl font-bold mb-2 text-[#d4af37]">Confirm Booking</h2>
-            <p className="text-sm text-white/70 mb-6">You are about to book {bookingModal.name} at {bookingModal.hotel_name || 'LuxeStay'}.</p>
+            <h2 className="text-2xl font-bold mb-2 text-[#d4af37]">Xác nhận đặt phòng</h2>
+            <p className="text-sm text-white/70 mb-6">Bạn sắp đặt {bookingModal.name} tại {bookingModal.hotel_name || 'LuxeStay'}.</p>
             
             <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10 text-sm">
               <div className="flex justify-between mb-2">
-                <span className="text-white/50">Check-in</span>
+                <span className="text-white/50">Nhận phòng</span>
                 <span>{checkIn}</span>
               </div>
               <div className="flex justify-between mb-2">
-                <span className="text-white/50">Check-out</span>
+                <span className="text-white/50">Trả phòng</span>
                 <span>{checkOut}</span>
               </div>
               <div className="flex justify-between font-bold text-[#d4af37] pt-2 border-t border-white/10">
-                <span>Price per night</span>
+                <span>Giá mỗi đêm</span>
                 <span>₫{bookingModal.base_price?.toLocaleString()}</span>
               </div>
             </div>
 
             <div className="flex gap-4">
               <button onClick={() => setBookingModal(null)} className="flex-1 py-3 rounded-xl border border-white/20 hover:bg-white/10 transition">
-                Cancel
+                Hủy
               </button>
               <button onClick={handleBook} disabled={bookingLoading} className="flex-1 btn-luxury py-3 rounded-xl font-semibold">
-                {bookingLoading ? 'Processing...' : 'Confirm'}
+                {bookingLoading ? 'Đang xử lý...' : 'Xác nhận'}
               </button>
             </div>
           </div>

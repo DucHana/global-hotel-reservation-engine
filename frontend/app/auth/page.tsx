@@ -78,8 +78,11 @@ export default function AuthPage() {
       const user = await login(loginEmail, loginPwd, rememberMe);
       showToast('success', 'Đăng nhập thành công', 'Đang chuyển hướng...');
       setTimeout(() => {
-        if (user.role === 'customer') router.push('/');
-        else router.push('/admin/dashboard');
+        if (user.role === 'admin' || user.role === 'superadmin' || user.role === 'staff') {
+          router.push('/admin/dashboard');
+        } else {
+          router.push('/');
+        }
       }, 1000);
     } catch (err: unknown) {
       setLoading(false);

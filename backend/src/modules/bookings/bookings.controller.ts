@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 import {
   Controller, Get, Post, Patch, Param, Body, Query,
-  UseGuards, ParseIntPipe, HttpCode, HttpStatus,
+  UseGuards, ParseIntPipe, HttpCode, HttpStatus, Req,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -23,16 +23,19 @@ export class BookingsController {
   @Post()
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreateBookingDto) {
-    return this.bookingsService.createBooking(dto);
+  async create(@Body() dto: CreateBookingDto, @Req() req: any) {
+    return this.bookingsService.createBooking({
+      ...dto,
+      user_id: req.user.user_id,
+    });
   }
 
   // ── USER: Xem lịch sử đặt phòng của mình ──────────────────
   // GET /api/bookings/my?userId=123
   @Get('my')
   @UseGuards(AuthGuard('jwt'))
-  async getMyBookings(@Query('userId', ParseIntPipe) userId: number) {
-    return this.bookingsService.getMyBookings(userId);
+  async getMyBookings(@Req() req: any) {
+    return this.bookingsService.getMyBookings(req.user.user_id);
   }
 
   // ── USER / ADMIN: Kiểm tra tình trạng phòng trống ─────────
@@ -96,8 +99,8 @@ export class BookingsController {
   @UseGuards(AuthGuard('jwt'))
   async cancelBooking(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { user_id: number },
+    @Req() req: any,
   ) {
-    return this.bookingsService.cancelBooking(id, body.user_id);
+    return this.bookingsService.cancelBooking(id, req.user.user_id);
   }
 }

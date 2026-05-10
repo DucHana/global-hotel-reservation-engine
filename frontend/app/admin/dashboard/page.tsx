@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { analyticsApi, usersApi, roomsApi, pricingApi, hotelsApi, bookingsApi, searchApi, supportApi, checkApiHealth } from '@/lib/api';
+import { analyticsApi, usersApi, roomsApi, pricingApi, hotelsApi, bookingsApi, searchApi, supportApi, reportsApi, checkApiHealth } from '@/lib/api';
 import type {
   MockUser, MockHotel, MockRoomType, MockBooking, MockPriceHistory, MockAnalytics, MockPricingRule
 } from '@/types';
@@ -51,6 +51,12 @@ export default function AdminDashboard() {
   const [searchAnalytics, setSearchAnalytics] = useState<{topCities:any[];amenities:any[];trend:any[]}>({topCities:[],amenities:[],trend:[]});
   const [supportTickets, setSupportTickets] = useState<any[]>([]);
   const [supportFilter, setSupportFilter] = useState('');
+  const [supportReplies, setSupportReplies] = useState<Record<string, string>>({});
+  const [busyTicketId, setBusyTicketId] = useState<string | null>(null);
+  const [busyBookingId, setBusyBookingId] = useState<string | null>(null);
+  const [topRoomsQuarterly, setTopRoomsQuarterly] = useState<any[]>([]);
+  const [branchPerformance, setBranchPerformance] = useState<any[]>([]);
+  const [occupancyOverview, setOccupancyOverview] = useState<any[]>([]);
 
   // Pricing form - Khởi tạo state chuẩn để không bị đỏ
   const [selRoom, setSelRoom] = useState<string>('');
@@ -186,6 +192,54 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleBookingStatusUpdate = async (bookingId: string, status: 'confirmed' | 'cancelled' | 'completed') => {
+    if (!user?.user_id) return;
+    try {
+      setBusyBookingId(bookingId);
+      await bookingsApi.updateStatus(bookingId, status, String(user.user_id));
+      showToast(`Đã cập nhật booking sang ${status}`, 'success');
+      const res = await bookingsApi.getAll() as { data: MockBooking[] };
+      setAllBookings(res.data);
+    } catch (e: any) {
+      showToast(e.message || 'Lỗi cập nhật trạng thái booking', 'error');
+    } finally {
+      setBusyBookingId(null);
+    }
+  };
+
+  const handleResolveTicket = async (ticketId: string) => {
+    if (!user?.user_id) return;
+    try {
+      setBusyTicketId(ticketId);
+      await supportApi.resolve(ticketId, String(user.user_id));
+      showToast('Đã đóng ticket', 'success');
+      const res = await supportApi.getAll() as { data: any[] };
+      setSupportTickets(res.data);
+    } catch (e: any) {
+      showToast(e.message || 'Không thể đóng ticket', 'error');
+    } finally {
+      setBusyTicketId(null);
+    }
+  };
+
+  const handleReplyTicket = async (ticketId: string) => {
+    const msg = (supportReplies[ticketId] || '').trim();
+    if (!msg) return showToast('Vui lòng nhập nội dung phản hồi', 'warning');
+    if (!user?.user_id) return;
+    try {
+      setBusyTicketId(ticketId);
+      await supportApi.reply(ticketId, String(user.user_id), user.full_name || 'Admin', msg);
+      setSupportReplies(prev => ({ ...prev, [ticketId]: '' }));
+      showToast('Đã gửi phản hồi', 'success');
+      const res = await supportApi.getAll() as { data: any[] };
+      setSupportTickets(res.data);
+    } catch (e: any) {
+      showToast(e.message || 'Không thể phản hồi ticket', 'error');
+    } finally {
+      setBusyTicketId(null);
+    }
+  };
+
   const openEditRuleModal = (rule: MockPricingRule) => {
     setEditingRule(rule);
     setRuleName(rule.rule_name);
@@ -200,10 +254,17 @@ export default function AdminDashboard() {
     setModalOpen('addRule');
   };
 
-  // Auth guard
+  // Auth guard - Bảo vệ trang Admin
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) router.push('/auth');
-  }, [authLoading, isAuthenticated, router]);
+    if (!authLoading) {
+      if (!isAuthenticated) {
+        router.push('/auth');
+      } else if (user?.role !== 'admin' && user?.role !== 'superadmin') {
+        // Nếu đã đăng nhập nhưng không có quyền admin, quay về trang chủ
+        router.push('/');
+      }
+    }
+  }, [authLoading, isAuthenticated, user, router]);
 
   // Check API health
   useEffect(() => {
@@ -218,6 +279,9 @@ export default function AdminDashboard() {
         if (page === 'dashboard') {
           const data = await analyticsApi.getDashboard() as MockAnalytics;
           setAnalytics(data);
+        } else if (page === 'auth') {
+          const res = await usersApi.getAll() as { data: MockUser[] };
+          setUsers(res.data);
         } else if (page === 'users') {
           const res = await usersApi.getAll() as { data: MockUser[] };
           setUsers(res.data);
@@ -231,11 +295,15 @@ export default function AdminDashboard() {
           const res = await hotelsApi.getAll() as { data: MockHotel[] };
           setHotels(res.data);
         } else if (page === 'pricing') {
-          const res = await roomsApi.getAll() as { data: MockRoomType[] };
-          setRooms(res.data);
-          if (res.data.length > 0) {
-            setSelRoom(res.data[0].room_type_id.toString());
-            setNewPrice(Number(res.data[0].current_price || res.data[0].base_price));
+          const [roomsRes, historyRes] = await Promise.all([
+            roomsApi.getAll() as Promise<{ data: MockRoomType[] }>,
+            pricingApi.getHistory() as Promise<{ data: MockPriceHistory[] }>,
+          ]);
+          setRooms(roomsRes.data);
+          setPriceHistory(historyRes.data || []);
+          if (roomsRes.data.length > 0) {
+            setSelRoom(roomsRes.data[0].room_type_id.toString());
+            setNewPrice(Number(roomsRes.data[0].current_price || roomsRes.data[0].base_price));
           }
         } else if (page === 'history') {
           const res = await pricingApi.getHistory() as { data: MockPriceHistory[] };
@@ -243,13 +311,6 @@ export default function AdminDashboard() {
         } else if (page === 'rules') {
           const res = await pricingApi.getRules() as { data: MockPricingRule[] };
           setPricingRules(res.data);
-        } else if (page === 'reports') {
-          const [analyticsData, bookingData] = await Promise.all([
-            analyticsApi.getDashboard() as Promise<MockAnalytics>,
-            bookingsApi.getAll() as Promise<{ data: MockBooking[] }>,
-          ]);
-          setAnalytics(analyticsData);
-          setAllBookings(bookingData.data);
         } else if (page === 'bookings') {
           const res = await bookingsApi.getAll() as { data: MockBooking[] };
           setAllBookings(res.data);
@@ -263,6 +324,16 @@ export default function AdminDashboard() {
         } else if (page === 'support') {
           const res = await supportApi.getAll() as { data: any[] };
           setSupportTickets(res.data);
+        } else if (page === 'reports') {
+          const [topRoomsRes, branchRes] = await Promise.all([
+            reportsApi.getTopRoomsQuarterly() as Promise<{ data: any[] }>,
+            reportsApi.getBranchPerformance() as Promise<{ data: any[] }>,
+          ]);
+          setTopRoomsQuarterly(topRoomsRes.data || []);
+          setBranchPerformance(branchRes.data || []);
+        } else if (page === 'occupancy') {
+          const res = await reportsApi.getOccupancyOverview() as { data: any[] };
+          setOccupancyOverview(res.data || []);
         }
       } catch (err) {
         showToast('Lỗi tải dữ liệu', 'error');
@@ -278,10 +349,18 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       const res = await pricingApi.updatePrice(String(selRoom), newPrice, priceReason) as any;
+      if (res?.error === 'BELOW_FLOOR' || res?.error === 'ABOVE_CAP') {
+        showToast(res?.message || 'Giá nhập không hợp lệ theo policy', 'error');
+        return;
+      }
       const alertFlag = res?.data?.alert_flag || res?.alert_flag;
       showToast(res?.message || 'Cập nhật giá thành công', alertFlag ? 'warning' : 'success');
-      const updated = await roomsApi.getAll() as { data: MockRoomType[] };
+      const [updated, historyRes] = await Promise.all([
+        roomsApi.getAll() as Promise<{ data: MockRoomType[] }>,
+        pricingApi.getHistory() as Promise<{ data: MockPriceHistory[] }>,
+      ]);
       setRooms(updated.data);
+      setPriceHistory(historyRes.data || []);
     } catch (e: any) {
       showToast(e.message || 'Lỗi cập nhật giá', 'error');
     } finally {
@@ -339,6 +418,11 @@ export default function AdminDashboard() {
   const basePrice = selRoomData?.base_price || 0;
   const currentPrice = selRoomData?.current_price || selRoomData?.base_price || 0;
   const priceDeltaPct = basePrice ? ((newPrice - basePrice) / basePrice * 100) : 0;
+  const roleStats = users.reduce<Record<string, number>>((acc, u) => {
+    const role = u.role || 'unknown';
+    acc[role] = (acc[role] || 0) + 1;
+    return acc;
+  }, {});
 
   if (authLoading) return <div style={{ background: '#0a0d13', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f0a500', fontFamily: 'DM Sans, sans-serif', fontSize: 18 }}>Đang tải...</div>;
 
@@ -462,6 +546,12 @@ export default function AdminDashboard() {
             {(['pricing','history','rules'] as PageId[]).map(id => (
               <button key={id} className={`nav-item${page === id ? ' active' : ''}`} onClick={() => setPage(id)}>
                 <span className="nav-icon">{id === 'pricing' ? '💰' : id === 'history' ? '📜' : '⚙️'}</span>{PAGE_TITLES[id]}
+              </button>
+            ))}
+            <div className="nav-label">Báo cáo OLAP</div>
+            {(['reports','occupancy'] as PageId[]).map(id => (
+              <button key={id} className={`nav-item${page === id ? ' active' : ''}`} onClick={() => setPage(id)}>
+                <span className="nav-icon">{id === 'reports' ? '📈' : '🏠'}</span>{PAGE_TITLES[id]}
               </button>
             ))}
             <div className="nav-label">TV1 — Giao dịch</div>
@@ -708,7 +798,400 @@ export default function AdminDashboard() {
                   </div>
                 )}
 
-                {/* Các phần khác (Users, Hotels, Bookings, Search Analytics, Support) render tương tự... */}
+                {/* ─── USERS ─── */}
+                {page === 'users' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">👥 Danh sách người dùng</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map(u => (
+                          <tr key={u.user_id}>
+                            <td style={{ fontWeight: 600 }}>{u.full_name}</td>
+                            <td>{u.email}</td>
+                            <td>{u.role}</td>
+                            <td>
+                              <span className={`badge ${u.is_active ? 'badge-active' : 'badge-inactive'}`}>
+                                {u.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── HOTELS ─── */}
+                {page === 'hotels' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">🏨 Chi nhánh</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Tên</th><th>Thành phố</th><th>Địa chỉ</th><th>Liên hệ</th><th>Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hotels.map(h => (
+                          <tr key={String(h.hotel_id)}>
+                            <td style={{ fontWeight: 600 }}>{h.name}</td>
+                            <td>{h.city}</td>
+                            <td>{h.address}</td>
+                            <td>{h.phone || h.email || '-'}</td>
+                            <td>
+                              <button className="btn btn-danger" style={{ padding: '4px 8px' }} onClick={() => handleDeleteHotel(h.hotel_id)}>Xóa</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── PRICE HISTORY ─── */}
+                {page === 'history' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">📜 Lịch sử thay đổi giá</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Loại phòng</th><th>Giá cũ</th><th>Giá mới</th><th>Biến động</th><th>Thời gian</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {priceHistory.map((h, idx) => (
+                          <tr key={String(h.price_history_id || idx)}>
+                            <td style={{ fontWeight: 600 }}>{h.room_type_name}</td>
+                            <td>₫{fmt(h.old_price)}</td>
+                            <td style={{ color: 'var(--gold)', fontWeight: 600 }}>₫{fmt(h.new_price)}</td>
+                            <td style={{ color: (h.change_pct || 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                              {(h.change_pct || 0) >= 0 ? '+' : ''}{h.change_pct || 0}%
+                            </td>
+                            <td>{h.changed_at ? new Date(h.changed_at).toLocaleString('vi-VN') : '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── REPORTS (OLAP) ─── */}
+                {page === 'reports' && (
+                  <div className="grid-cols-2">
+                    <div className="card">
+                      <div className="card-header">
+                        <span className="card-title">🏆 Top 3 phòng doanh thu theo quý</span>
+                      </div>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Năm/Q</th><th>Chi nhánh</th><th>Phòng</th><th>Doanh thu</th><th>Hạng</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {topRoomsQuarterly.map((r, idx) => (
+                            <tr key={String(idx)}>
+                              <td>{r.yr}/Q{r.qtr}</td>
+                              <td>{r.hotel_name}</td>
+                              <td>{r.room_name}</td>
+                              <td style={{ color: 'var(--gold)', fontWeight: 600 }}>₫{fmt(Number(r.total_revenue || 0))}</td>
+                              <td>#{r.revenue_rank}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="card">
+                      <div className="card-header">
+                        <span className="card-title">🏨 Đóng góp doanh thu theo chi nhánh</span>
+                      </div>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Chi nhánh</th><th>Thành phố</th><th>Doanh thu</th><th>Tỷ trọng</th><th>Hạng</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {branchPerformance.map((r, idx) => (
+                            <tr key={String(idx)}>
+                              <td>{r.hotel_name}</td>
+                              <td>{r.city}</td>
+                              <td style={{ color: 'var(--gold)', fontWeight: 600 }}>₫{fmt(Number(r.hotel_revenue || 0))}</td>
+                              <td>{Number(r.contribution_pct || 0).toFixed(2)}%</td>
+                              <td>#{r.revenue_rank}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── OCCUPANCY ─── */}
+                {page === 'occupancy' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">🏠 Occupancy theo loại phòng</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Chi nhánh</th><th>Loại phòng</th><th>Tổng phòng</th><th>Booking active</th><th>Occupancy</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {occupancyOverview.map((r, idx) => (
+                          <tr key={String(idx)}>
+                            <td>{r.hotel_name}</td>
+                            <td>{r.room_type_name}</td>
+                            <td>{r.total_rooms}</td>
+                            <td>{r.active_bookings}</td>
+                            <td style={{ color: Number(r.occupancy_rate || 0) >= 70 ? 'var(--success)' : 'var(--text2)', fontWeight: 600 }}>
+                              {Number(r.occupancy_rate || 0).toFixed(2)}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── BOOKINGS ─── */}
+                {page === 'bookings' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">📝 Quản lý đặt phòng</span>
+                    </div>
+                    <div className="card-body">
+                      <input
+                        placeholder="Lọc theo tên khách hoặc mã booking..."
+                        value={bookingFilter}
+                        onChange={e => setBookingFilter(e.target.value)}
+                      />
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Booking</th><th>Khách</th><th>Phòng</th><th>Thời gian</th><th>Tổng tiền</th><th>Trạng thái</th><th>Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allBookings
+                          .filter(b => {
+                            const key = bookingFilter.trim().toLowerCase();
+                            if (!key) return true;
+                            return b.booking_id.toLowerCase().includes(key) || (b.user_name || '').toLowerCase().includes(key);
+                          })
+                          .map(b => (
+                            <tr key={b.booking_id}>
+                              <td style={{ fontWeight: 600 }}>#{b.booking_id.slice(0, 8)}</td>
+                              <td>{b.user_name}</td>
+                              <td>{b.room_type_name}</td>
+                              <td>{new Date(b.check_in).toLocaleDateString('vi-VN')} - {new Date(b.check_out).toLocaleDateString('vi-VN')}</td>
+                              <td style={{ color: 'var(--gold)', fontWeight: 600 }}>₫{fmt(b.total_price)}</td>
+                              <td>{b.status}</td>
+                              <td>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                  {b.status === 'pending' && (
+                                    <>
+                                      <button className="btn btn-primary" style={{ padding: '4px 8px' }} disabled={busyBookingId === b.booking_id} onClick={() => handleBookingStatusUpdate(b.booking_id, 'confirmed')}>Duyệt</button>
+                                      <button className="btn btn-danger" style={{ padding: '4px 8px' }} disabled={busyBookingId === b.booking_id} onClick={() => handleBookingStatusUpdate(b.booking_id, 'cancelled')}>Hủy</button>
+                                    </>
+                                  )}
+                                  {b.status === 'confirmed' && (
+                                    <>
+                                      <button className="btn btn-primary" style={{ padding: '4px 8px' }} disabled={busyBookingId === b.booking_id} onClick={() => handleBookingStatusUpdate(b.booking_id, 'completed')}>Hoàn thành</button>
+                                      <button className="btn btn-danger" style={{ padding: '4px 8px' }} disabled={busyBookingId === b.booking_id} onClick={() => handleBookingStatusUpdate(b.booking_id, 'cancelled')}>Hủy</button>
+                                    </>
+                                  )}
+                                  {(b.status === 'completed' || b.status === 'cancelled') && <span style={{ color: 'var(--text3)', fontSize: 12 }}>Đã khóa</span>}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── SEARCH ANALYTICS ─── */}
+                {page === 'search-analytics' && (
+                  <div className="grid-cols-3">
+                    <div className="card">
+                      <div className="card-header"><span className="card-title">🏙️ Top thành phố</span></div>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Thành phố</th><th>Lượt tìm</th><th>Chuyển đổi</th><th>Tỷ lệ CVR</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {searchAnalytics.topCities.map((row, i) => (
+                            <tr key={String(i)}>
+                              <td>{row.city || '-'}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(Number(row.search_count || row.total || 0))}</td>
+                              <td style={{ textAlign: 'right' }}>{fmt(Number(row.converted_count || row.conversions || 0))}</td>
+                              <td style={{ textAlign: 'right' }}>{Number(row.conversion_rate || 0).toFixed(1)}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="card">
+                      <div className="card-header"><span className="card-title">🧩 Amenities phổ biến</span></div>
+                      <table>
+                        <tbody>
+                          {searchAnalytics.amenities.map((row, i) => (
+                            <tr key={String(i)}>
+                              <td>{row.amenity || row.name || '-'}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(Number(row.count || row.total || 0))}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="card">
+                      <div className="card-header"><span className="card-title">📈 Xu hướng tìm kiếm</span></div>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Ngày</th><th>Lượt tìm</th><th>Chuyển đổi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {searchAnalytics.trend.map((row, i) => (
+                            <tr key={String(i)}>
+                              <td>{row.date || row.day || '-'}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(Number(row.searches || row.count || row.search_count || 0))}</td>
+                              <td style={{ textAlign: 'right' }}>{fmt(Number(row.conversions || 0))}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* ─── SUPPORT ─── */}
+                {page === 'support' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">📨 Hỗ trợ khách hàng</span>
+                    </div>
+                    <div className="card-body">
+                      <input
+                        placeholder="Lọc theo tiêu đề ticket..."
+                        value={supportFilter}
+                        onChange={e => setSupportFilter(e.target.value)}
+                      />
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Chủ đề</th><th>Khách hàng</th><th>Ưu tiên</th><th>Trạng thái</th><th>Tạo lúc</th><th>Xử lý</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {supportTickets
+                          .filter(t => {
+                            const key = supportFilter.trim().toLowerCase();
+                            if (!key) return true;
+                            return String(t.subject || '').toLowerCase().includes(key);
+                          })
+                          .map(t => (
+                            <tr key={String(t._id)}>
+                              <td style={{ fontWeight: 600 }}>{t.subject || '-'}</td>
+                              <td>{t.user_name || t.user_email || '-'}</td>
+                              <td>{t.priority || 'normal'}</td>
+                              <td>{t.status || '-'}</td>
+                              <td>{t.createdAt ? new Date(t.createdAt).toLocaleString('vi-VN') : '-'}</td>
+                              <td style={{ minWidth: 280 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <input
+                                    placeholder="Nhập phản hồi cho khách..."
+                                    value={supportReplies[String(t._id)] || ''}
+                                    onChange={e => setSupportReplies(prev => ({ ...prev, [String(t._id)]: e.target.value }))}
+                                  />
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button className="btn btn-ghost" style={{ padding: '4px 8px' }} disabled={busyTicketId === String(t._id)} onClick={() => handleReplyTicket(String(t._id))}>Reply</button>
+                                    {t.status !== 'resolved' && (
+                                      <button className="btn btn-primary" style={{ padding: '4px 8px' }} disabled={busyTicketId === String(t._id)} onClick={() => handleResolveTicket(String(t._id))}>Resolve</button>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ─── AUTH & RBAC ─── */}
+                {page === 'auth' && (
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">🔐 Auth & RBAC</span>
+                    </div>
+                    <div className="card-body">
+                      <div className="grid-cols-3" style={{ marginBottom: 16 }}>
+                        <div className="stat-card">
+                          <div className="stat-label-s">Phiên hiện tại</div>
+                          <div style={{ fontWeight: 700, color: 'var(--gold)' }}>{user?.email || '-'}</div>
+                          <div style={{ color: 'var(--text2)', fontSize: 12 }}>Role: {user?.role || '-'}</div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-label-s">Admin</div>
+                          <div className="stat-value-s">{fmt(roleStats.admin || 0)}</div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-label-s">Superadmin</div>
+                          <div className="stat-value-s">{fmt(roleStats.superadmin || 0)}</div>
+                        </div>
+                      </div>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Tài nguyên</th><th>Vai trò được phép</th><th>Ghi chú</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>Admin Dashboard</td>
+                            <td>admin, superadmin</td>
+                            <td>Guard phía frontend + backend</td>
+                          </tr>
+                          <tr>
+                            <td>Pricing Rules (create/update/delete)</td>
+                            <td>admin</td>
+                            <td>API có RolesGuard</td>
+                          </tr>
+                          <tr>
+                            <td>Hotels / Rooms quản trị</td>
+                            <td>admin, superadmin</td>
+                            <td>API có RolesGuard</td>
+                          </tr>
+                          <tr>
+                            <td>Bookings quản trị</td>
+                            <td>admin, superadmin</td>
+                            <td>Xem và thao tác trạng thái booking</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
