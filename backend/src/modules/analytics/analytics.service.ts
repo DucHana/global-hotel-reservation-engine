@@ -37,11 +37,11 @@ export class AnalyticsService {
       .where('CAST(booking.created_at AS DATE) = :today', { today })
       .getCount();
 
-    // Tổng doanh thu (confirmed bookings)
+    // Tổng doanh thu (all non-cancelled bookings)
     const totalRevenueResult = await this.bookingsRepository
       .createQueryBuilder('booking')
       .select('SUM(booking.total_price)', 'sum')
-      .where("booking.status = 'confirmed'")
+      .where("booking.status IN ('pending', 'confirmed', 'completed')")
       .getRawOne();
 
     const totalRevenue = totalRevenueResult?.sum || 0;
@@ -82,7 +82,7 @@ export class AnalyticsService {
       .addSelect('AVG(CAST(booking.total_price AS FLOAT))', 'avg_price')
       .innerJoin('room_types', 'rt', 'rt.room_type_id = booking.room_type_id')
       .innerJoin('hotels', 'h', 'h.hotel_id = rt.hotel_id')
-      .where("booking.status = 'confirmed'")
+      .where("booking.status IN ('pending', 'confirmed', 'completed')")
       .groupBy('rt.room_type_id, rt.name, h.name')
       .orderBy('SUM(booking.total_price)', 'DESC')
       .limit(5)
@@ -107,17 +107,18 @@ export class AnalyticsService {
       const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
       const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      monthEnd.setHours(23, 59, 59, 999);
 
       const result = await this.bookingsRepository
         .createQueryBuilder('booking')
         .select('SUM(booking.total_price)', 'total')
         .addSelect('COUNT(booking.booking_id)', 'count')
         .where(
-          'booking.created_at BETWEEN :start AND :end AND booking.status = :status',
+          'booking.created_at BETWEEN :start AND :end AND booking.status IN (:...statuses)',
           {
             start: monthStart,
             end: monthEnd,
-            status: 'confirmed',
+            statuses: ['pending', 'confirmed', 'completed'],
           },
         )
         .getRawOne();

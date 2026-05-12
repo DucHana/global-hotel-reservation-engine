@@ -132,10 +132,11 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       const payload = {
-        hotel_id: modalRoomHotel,
+        hotel_id: Number(modalRoomHotel),
         name: modalRoomName,
         capacity: modalRoomCapacity,
         base_price: modalRoomPrice,
+        current_price: modalRoomPrice,
         total_rooms: modalRoomTotal,
         description: modalRoomDesc
       };
@@ -335,8 +336,21 @@ export default function AdminDashboard() {
       setLoading(true);
       try {
         if (page === 'dashboard') {
-          const data = await analyticsApi.getDashboard() as MockAnalytics;
-          setAnalytics(data);
+          const data = await analyticsApi.getDashboard() as any;
+          setAnalytics({
+            kpis: {
+              total_revenue: Number(data?.kpis?.total_revenue || 0),
+              revenue_growth: Number(data?.kpis?.revenue_growth || 0),
+              total_bookings: Number(data?.kpis?.total_bookings || 0),
+              booking_growth: Number(data?.kpis?.booking_growth || 0),
+              avg_occupancy: Number(data?.kpis?.avg_occupancy || 0),
+              occupancy_change: Number(data?.kpis?.occupancy_change || 0),
+              avg_daily_rate: Number(data?.kpis?.avg_daily_rate || 0),
+              adr_change: Number(data?.kpis?.adr_change || 0),
+            },
+            monthly_revenue: Array.isArray(data?.monthly_revenue) ? data.monthly_revenue : [],
+            top_rooms: Array.isArray(data?.top_rooms) ? data.top_rooms : [],
+          } as MockAnalytics);
         } else if (page === 'auth') {
           const res = await usersApi.getAll() as { data: MockUser[] };
           setUsers(res.data);

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { searchApi, bookingsApi } from '@/lib/api';
+import { searchApi, bookingsApi, roomsApi } from '@/lib/api';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { useAuth } from '@/lib/auth';
@@ -16,13 +16,68 @@ function SearchResultsContent() {
   const checkIn = searchParams.get('checkIn') || '';
   const checkOut = searchParams.get('checkOut') || '';
   const guests = parseInt(searchParams.get('guests') || '1');
-  const amenities = searchParams.get('amenities') || '';
+  const amenitiesParam = searchParams.get('amenities') || '';
+  const amenities = amenitiesParam
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [bookingModal, setBookingModal] = useState<any>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
+  const [searchCity, setSearchCity] = useState(city);
+  const [searchCheckIn, setSearchCheckIn] = useState(checkIn);
+  const [searchCheckOut, setSearchCheckOut] = useState(checkOut);
+  const [searchGuests, setSearchGuests] = useState(guests);
+  const [amenitiesList, setAmenitiesList] = useState<string[]>([]);
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>(amenities);
+  const [amenitiesOpen, setAmenitiesOpen] = useState(false);
+  const amenitiesRef = useRef<HTMLDivElement | null>(null);
+
+  const handleRefineSearch = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const query = new URLSearchParams();
+    if (searchCity) query.set('city', searchCity.trim());
+    if (searchCheckIn) query.set('checkIn', searchCheckIn);
+    if (searchCheckOut) query.set('checkOut', searchCheckOut);
+    query.set('guests', String(searchGuests || 1));
+    if (selectedAmenities.length > 0) query.set('amenities', selectedAmenities.join(','));
+
+    router.push(`/search?${query.toString()}`);
+  };
+
+  useEffect(() => {
+    setSearchCity(city);
+    setSearchCheckIn(checkIn);
+    setSearchCheckOut(checkOut);
+    setSearchGuests(guests);
+    setSelectedAmenities(amenities);
+  }, [city, checkIn, checkOut, guests, amenitiesParam]);
+
+  useEffect(() => {
+    const loadAmenities = async () => {
+      try {
+        const res = await roomsApi.getAmenities();
+        setAmenitiesList(res.data || []);
+      } catch {
+        setAmenitiesList([]);
+      }
+    };
+    loadAmenities();
+  }, []);
+
+  useEffect(() => {
+    const onClickOutside = (event: MouseEvent) => {
+      if (!amenitiesRef.current) return;
+      if (!amenitiesRef.current.contains(event.target as Node)) {
+        setAmenitiesOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
 
   useEffect(() => {
     const fetchRooms = async () => {
@@ -34,7 +89,7 @@ function SearchResultsContent() {
           checkIn,
           checkOut,
           guests,
-          amenities: amenities ? [amenities] : undefined,
+          amenities: amenities.length > 0 ? amenities : undefined,
         });
         setRooms(res.data);
         
@@ -46,7 +101,7 @@ function SearchResultsContent() {
           check_in: checkIn || new Date().toISOString(),
           check_out: checkOut || new Date(Date.now() + 86400000).toISOString(),
           guests,
-          filters: amenities ? { amenities: [amenities] } : {},
+          filters: amenities.length > 0 ? { amenities } : {},
           results_count: res.data.length,
           session_id: sid,
           response_time_ms: Date.now() - start
@@ -59,7 +114,7 @@ function SearchResultsContent() {
       }
     };
     fetchRooms();
-  }, [city, checkIn, checkOut, guests, amenities]);
+  }, [city, checkIn, checkOut, guests, amenitiesParam]);
 
   const handleBook = async () => {
     if (!bookingModal) return;
@@ -108,7 +163,7 @@ function SearchResultsContent() {
         </Link>
         <div className="flex gap-4 text-sm font-medium items-center">
           <div className="glass px-4 py-2 rounded-full text-white/80">
-            {city || 'Tất cả điểm đến'} • {checkIn} đến {checkOut} • {guests} khách{amenities ? ` • ${amenities}` : ''}
+            {city || 'Tất cả điểm đến'} • {checkIn} đến {checkOut} • {guests} khách{amenities.length > 0 ? ` • ${amenities.join(', ')}` : ''}
           </div>
           {isAuthenticated ? (
             <Link href="/profile" className="hover:text-[#d4af37] transition-colors ml-4">Hồ sơ của tôi</Link>
@@ -119,6 +174,112 @@ function SearchResultsContent() {
       </nav>
 
       <main className="max-w-6xl mx-auto px-6 py-12">
+        <form onSubmit={handleRefineSearch} className="glass-panel mb-8 p-4 rounded-2xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3 items-end">
+          <div className="xl:col-span-2">
+            <label className="block text-[11px] uppercase tracking-wider text-[#d4af37] mb-1">Điểm đến</label>
+            <input
+              value={searchCity}
+              onChange={(e) => setSearchCity(e.target.value)}
+              placeholder="Bạn muốn đi đâu?"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#d4af37]"
+            />
+          </div>
+          <div className="xl:col-span-2">
+            <label className="block text-[11px] uppercase tracking-wider text-[#d4af37] mb-1">Nhận phòng</label>
+            <input
+              type="date"
+              value={searchCheckIn}
+              onChange={(e) => setSearchCheckIn(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37] [color-scheme:dark]"
+            />
+          </div>
+          <div className="xl:col-span-2">
+            <label className="block text-[11px] uppercase tracking-wider text-[#d4af37] mb-1">Trả phòng</label>
+            <input
+              type="date"
+              value={searchCheckOut}
+              onChange={(e) => setSearchCheckOut(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37] [color-scheme:dark]"
+            />
+          </div>
+          <div className="xl:col-span-2">
+            <label className="block text-[11px] uppercase tracking-wider text-[#d4af37] mb-1">Số khách</label>
+            <select
+              value={String(searchGuests)}
+              onChange={(e) => setSearchGuests(Number(e.target.value))}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#d4af37]"
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n} className="bg-[#1a1f2e]">
+                  {n} khách
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="xl:col-span-4">
+            <label className="block text-[11px] uppercase tracking-wider text-[#d4af37] mb-1">Tiện nghi</label>
+            <div className="flex gap-2" ref={amenitiesRef}>
+              <div className="relative flex-1">
+                <button
+                  type="button"
+                  onClick={() => setAmenitiesOpen((prev) => !prev)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-left text-white/90 focus:outline-none focus:border-[#d4af37] transition-all flex items-center justify-between"
+                >
+                  <span className="truncate">
+                    {selectedAmenities.length > 0 ? `${selectedAmenities.length} tiện nghi đã chọn` : 'Chọn tiện nghi'}
+                  </span>
+                  <span className="text-white/50 text-[10px]">▼</span>
+                </button>
+                {amenitiesOpen && (
+                  <div className="absolute z-30 mt-2 w-full max-h-56 overflow-y-auto rounded-xl border border-white/15 bg-[#111827]/95 backdrop-blur-md shadow-2xl p-2">
+                    {amenitiesList.length === 0 ? (
+                      <div className="text-xs text-white/50 px-2 py-2">Chưa có dữ liệu tiện nghi</div>
+                    ) : (
+                      <>
+                        <div className="flex justify-end px-2 py-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAmenities([])}
+                            className="text-[11px] text-[#d4af37] hover:text-[#f5d77f] transition-colors"
+                          >
+                            Xóa chọn
+                          </button>
+                        </div>
+                        {amenitiesList.map((a) => {
+                          const checked = selectedAmenities.includes(a);
+                          return (
+                            <label
+                              key={a}
+                              className={`flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
+                                checked ? 'bg-[#d4af37]/15 text-[#f5d77f]' : 'text-white/85 hover:bg-white/10'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() =>
+                                  setSelectedAmenities((prev) =>
+                                    prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a],
+                                  )
+                                }
+                                className="accent-[#d4af37]"
+                              />
+                              <span>{a}</span>
+                            </label>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button type="submit" className="btn-luxury px-6 rounded-xl text-sm font-semibold whitespace-nowrap min-w-[120px]">
+                Tìm lại
+              </button>
+            </div>
+          </div>
+        </form>
+
         <h1 className="text-3xl font-light mb-8">
           Tìm thấy <span className="font-bold text-[#d4af37]">{rooms.length}</span> lựa chọn lưu trú
         </h1>

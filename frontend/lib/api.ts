@@ -240,8 +240,12 @@ export const pricingApi = {
 
 export const analyticsApi = {
   getDashboard: async () => {
-    try { return await http<typeof MOCK_ANALYTICS>('/api/analytics/dashboard'); } 
-    catch { return null; }
+    try {
+      const data = await http<typeof MOCK_ANALYTICS>('/api/analytics/dashboard');
+      return data || MOCK_ANALYTICS;
+    } catch {
+      return MOCK_ANALYTICS;
+    }
   },
   getRevenue: async () => {
     try { return await http('/api/analytics/revenue'); } 

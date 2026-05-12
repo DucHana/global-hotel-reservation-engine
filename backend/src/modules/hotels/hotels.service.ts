@@ -1,8 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { Hotel } from '../../database/entities/hotel.entity';
 import { RoomType } from '../../database/entities/room-type.entity';
+import {
+  RoomCatalog,
+  RoomCatalogDocument,
+} from '../rooms/schemas/room-catalog.schema';
 
 @Injectable()
 export class HotelsService {
@@ -11,6 +17,9 @@ export class HotelsService {
     private hotelsRepository: Repository<Hotel>,
     @InjectRepository(RoomType)
     private roomTypesRepository: Repository<RoomType>,
+    @InjectModel(RoomCatalog.name)
+    private roomCatalogModel: Model<RoomCatalogDocument>,
+    private dataSource: DataSource,
   ) {}
 
   async findAll() {
@@ -77,7 +86,87 @@ export class HotelsService {
 
   async delete(hotelId: number) {
     await this.findById(hotelId);
-    await this.hotelsRepository.delete(hotelId);
+
+    const roomTypeRows = await this.roomTypesRepository.find({
+      where: { hotel_id: hotelId } as any,
+      select: ['room_type_id'],
+    });
+    const roomTypeIds = roomTypeRows.map((r) => Number(r.room_type_id));
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Remove records referencing room types of this hotel.
+      if (roomTypeIds.length > 0) {
+        const roomTypeList = roomTypeIds.join(',');
+        await queryRunner.query(`
+          IF OBJECT_ID('payments', 'U') IS NOT NULL
+          BEGIN
+            DELETE p
+            FROM payments p
+            INNER JOIN bookings b ON p.booking_id = b.booking_id
+            WHERE b.room_type_id IN (${roomTypeList})
+          END
+        `);
+        await queryRunner.query(
+          `DELETE FROM bookings WHERE room_type_id IN (${roomTypeList})`,
+        );
+        await queryRunner.query(
+          `DELETE FROM price_history WHERE room_type_id IN (${roomTypeList})`,
+        );
+        await queryRunner.query(
+          `DELETE FROM pricing_suggestions WHERE room_type_id IN (${roomTypeList})`,
+        );
+      }
+
+      // Remove records referencing hotel directly.
+      await queryRunner.query(
+        `
+          IF OBJECT_ID('search_summary', 'U') IS NOT NULL
+          BEGIN
+            DELETE FROM search_summary WHERE hotel_id = @0
+          END
+        `,
+        [hotelId],
+      );
+
+      await queryRunner.query(
+        `
+          DELETE FROM pricing_suggestions
+          WHERE rule_id IN (SELECT rule_id FROM pricing_rules WHERE hotel_id = @0)
+        `,
+        [hotelId],
+      );
+      await queryRunner.query(
+        `DELETE FROM pricing_rules WHERE hotel_id = @0`,
+        [hotelId],
+      );
+      await queryRunner.query(
+        `DELETE FROM room_types WHERE hotel_id = @0`,
+        [hotelId],
+      );
+      await queryRunner.query(`DELETE FROM hotels WHERE hotel_id = @0`, [hotelId]);
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    // Remove catalog docs from MongoDB (hard-delete) after SQL transaction completes.
+    await this.roomCatalogModel.deleteMany({
+      $or: [
+        { hotel_id: hotelId },
+        ...(roomTypeIds.length > 0
+          ? [{ room_type_id: { $in: roomTypeIds } }]
+          : []),
+      ],
+    });
+
     return { message: 'Xóa khách sạn thành công' };
   }
 
